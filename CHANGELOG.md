@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-03
+
 ### Added
 - **Cloudflare Zero Trust, as an optional mode.** **Security → Cloudflare** can create a Cloudflare Tunnel with one to five replicas, publish the panel and every app domain through it (DNS records included), and put the panel behind Cloudflare Access with an email allow list. Nothing changes until you set it up, and every step can be undone. Full guide: `docs/cloudflare.md`.
 - **SSH through Cloudflare.** Optional short-lived SSH certificates through Cloudflare Access for Infrastructure, so no SSH keys are kept on the server. The panel shows a script to run as root that makes `sshd` trust Cloudflare; it never edits `sshd_config` itself.
