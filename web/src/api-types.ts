@@ -807,6 +807,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cloudflare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cloudflare Zero Trust settings and tunnel status (admin) */
+        get: operations["get_v1_cloudflare"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Protect the panel domain with Cloudflare Access (admin, write) */
+        put: operations["put_v1_cloudflare_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/access/enforcement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Require a valid Cloudflare Access token for the panel domain (admin, write) */
+        put: operations["put_v1_cloudflare_access_enforcement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save the Cloudflare account, zone, and API token after checking them (admin, write) */
+        put: operations["put_v1_cloudflare_credentials"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Checks that must pass before the public ports are closed (admin) */
+        get: operations["get_v1_cloudflare_preflight"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/ssh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set up SSH through Access for Infrastructure and return the server script (admin, write) */
+        put: operations["put_v1_cloudflare_ssh"];
+        post?: never;
+        /** Remove the SSH route, target, and application (admin, write) */
+        delete: operations["delete_v1_cloudflare_ssh"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/ssh/confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Record that SSH through Cloudflare was set up and tested (admin, write) */
+        put: operations["put_v1_cloudflare_ssh_confirmation"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/ssh/script": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Script that makes the server trust Cloudflare SSH certificates (admin) */
+        get: operations["get_v1_cloudflare_ssh_script"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/tunnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create the tunnel and start its replicas (admin, write) */
+        post: operations["post_v1_cloudflare_tunnel"];
+        /** Remove the tunnel, its DNS records, Access applications, and replicas (admin, write) */
+        delete: operations["delete_v1_cloudflare_tunnel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/tunnel/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish every domain through the tunnel and point DNS at it (admin, write) */
+        post: operations["post_v1_cloudflare_tunnel_publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cloudflare/tunnel/replicas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the number of tunnel replicas, 1 to 5 (admin, write) */
+        put: operations["put_v1_cloudflare_tunnel_replicas"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/database-engines": {
         parameters: {
             query?: never;
@@ -3440,6 +3629,37 @@ export interface components {
             /** @description Non-secret description such as the chat id or webhook host. */
             summary: string;
         };
+        CloudflareStatus: {
+            access_configured: boolean;
+            access_emails: string[];
+            access_enforced: boolean;
+            account_id: string;
+            agent_bypass: boolean;
+            /** @description Connections Cloudflare sees for the tunnel; `None` when it could not be read. */
+            connections?: number | null;
+            /** Format: int32 */
+            max_replicas: number;
+            panel_domain?: string | null;
+            published_hosts: string[];
+            /** @description Why the replicas could not be started, when the last create or scale failed. */
+            replica_error?: string | null;
+            /** Format: int32 */
+            replicas: number;
+            replicas_running: number;
+            ssh_address: string;
+            ssh_ca_public_key: string;
+            ssh_configured: boolean;
+            ssh_ready: boolean;
+            ssh_users: string[];
+            team_domain: string;
+            /** @description True once an API token is saved. The token itself is never returned. */
+            token_saved: boolean;
+            tunnel_id?: string | null;
+            tunnel_name: string;
+            tunnel_published: boolean;
+            zone_id: string;
+            zone_name: string;
+        };
         CompleteGithubApp: {
             code: string;
             state: string;
@@ -3459,6 +3679,10 @@ export interface components {
         ComponentsStarted: {
             /** @description Agents and caches queued for an update. */
             queued: number;
+        };
+        ConfirmSsh: {
+            /** @description True once the script ran on the server and a connection through Cloudflare worked. */
+            confirmed: boolean;
         };
         ConnectionView: {
             database: string;
@@ -3572,6 +3796,13 @@ export interface components {
             name: string;
             scopes: string[];
         };
+        CreateTunnel: {
+            /**
+             * Format: int64
+             * @description Number of `cloudflared` replicas, 1 to 5. Defaults to 2.
+             */
+            replicas?: number | null;
+        };
         CreateUser: {
             display_name?: string | null;
             email: string;
@@ -3654,6 +3885,12 @@ export interface components {
             name: string;
             path_style: boolean;
             region: string;
+        };
+        DnsOutcome: {
+            /** @description `created`, `kept`, `replaced`, or `conflict`. */
+            action: string;
+            detail?: string | null;
+            host: string;
         };
         DomainCacheView: {
             /** Format: uuid */
@@ -4176,6 +4413,13 @@ export interface components {
         PauseBuilds: {
             paused: boolean;
         };
+        PreflightCheckView: {
+            id: string;
+            message: string;
+            ok: boolean;
+            /** @description A failing required check blocks closing the public ports. */
+            required: boolean;
+        };
         PreviewDomain: {
             /** Format: int32 */
             target_port?: number | null;
@@ -4208,6 +4452,10 @@ export interface components {
             /** Format: int64 */
             reclaimed_bytes: number;
         };
+        PublishRequest: {
+            /** @description Replace an existing A, AAAA, or CNAME record with the tunnel's. Off by default. */
+            overwrite_dns?: boolean;
+        };
         PutEnvVar: {
             is_build_secret: boolean;
             key: string;
@@ -4238,6 +4486,12 @@ export interface components {
             path_prefix: string;
             /** Format: int32 */
             window_secs: number;
+        };
+        Readiness: {
+            checks: components["schemas"]["PreflightCheckView"][];
+            /** @description True when every required check passes, so the installer may close the ports. */
+            ready: boolean;
+            skipped: components["schemas"]["SkippedHost"][];
         };
         RecoveryCodes: {
             recovery_codes: string[];
@@ -4440,6 +4694,14 @@ export interface components {
             enabled?: boolean | null;
             name: string;
         };
+        SaveCredentials: {
+            /** @description 32-character Cloudflare account id. */
+            account_id: string;
+            /** @description API token. Leave out to keep the saved one. */
+            api_token?: string | null;
+            /** @description 32-character id of the zone the hostnames live in. */
+            zone_id: string;
+        };
         SaveDepartment: {
             description?: string | null;
             name: string;
@@ -4639,13 +4901,44 @@ export interface components {
             csrf_token?: string | null;
             user: components["schemas"]["UserView"];
         };
+        SetEnforcement: {
+            enforced: boolean;
+        };
+        SetReplicas: {
+            /** Format: int64 */
+            replicas: number;
+        };
+        SetupAccess: {
+            /**
+             * @description Let AI agents and API clients reach `/mcp`, `/oauth`, `/.well-known`, and
+             *     `/api/health` without an Access login. They still need their own tokens.
+             */
+            agent_bypass?: boolean;
+            /** @description Email addresses allowed through Cloudflare Access. */
+            emails: string[];
+            /** @description Your Zero Trust team domain, such as `myteam.cloudflareaccess.com` or just `myteam`. */
+            team_domain: string;
+        };
         SetupRequest: {
             display_name?: string | null;
             email: string;
             password: string;
         };
+        SetupSsh: {
+            /**
+             * @description IPv4 address `cloudflared` reaches the server's SSH daemon on, for
+             *     example the Docker gateway of the `rudder-proxy` network.
+             */
+            address: string;
+            /** @description Unix accounts Cloudflare may log people in as. */
+            users: string[];
+        };
         SetupStatus: {
             needs_setup: boolean;
+        };
+        SkippedHost: {
+            host: string;
+            reason: string;
         };
         SourceView: {
             branch: string;
@@ -4661,6 +4954,14 @@ export interface components {
             repo: string;
             strategy: string;
             webhook_secret?: string | null;
+        };
+        SshScript: {
+            script: string;
+        };
+        SshSetup: {
+            /** @description Run as root on the server so `sshd` trusts Cloudflare's certificates. */
+            script: string;
+            status: components["schemas"]["CloudflareStatus"];
         };
         SslCertificateStat: {
             /** Format: int64 */
@@ -4756,6 +5057,13 @@ export interface components {
             /** @description Create the app under this organization instead of your own account. */
             organization?: string | null;
         };
+        SyncReport: {
+            dns: components["schemas"]["DnsOutcome"][];
+            hostnames: string[];
+            /** @description Hostnames whose DNS record Rudder did not change. */
+            pending: number;
+            skipped: components["schemas"]["SkippedHost"][];
+        };
         SystemInfo: {
             /**
              * Format: int64
@@ -4770,6 +5078,12 @@ export interface components {
              */
             schema: number;
             version: string;
+        };
+        TeardownReport: {
+            /** @description Hostnames whose DNS record Rudder removed. Point them back at this server. */
+            removed_dns: string[];
+            /** @description Steps that did not finish; the rest was removed. */
+            warnings: string[];
         };
         TemplateDeployed: {
             deployment?: components["schemas"]["DeploymentView"] | null;
@@ -6461,6 +6775,296 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_v1_cloudflare: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cloudflare Zero Trust settings and tunnel status (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetupAccess"];
+            };
+        };
+        responses: {
+            /** @description Protect the panel domain with Cloudflare Access (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_access_enforcement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetEnforcement"];
+            };
+        };
+        responses: {
+            /** @description Require a valid Cloudflare Access token for the panel domain (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_credentials: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SaveCredentials"];
+            };
+        };
+        responses: {
+            /** @description Save the Cloudflare account, zone, and API token after checking them (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    get_v1_cloudflare_preflight: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Checks that must pass before the public ports are closed (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Readiness"];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_ssh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetupSsh"];
+            };
+        };
+        responses: {
+            /** @description Set up SSH through Access for Infrastructure and return the server script (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SshSetup"];
+                };
+            };
+        };
+    };
+    delete_v1_cloudflare_ssh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove the SSH route, target, and application (admin, write) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    put_v1_cloudflare_ssh_confirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConfirmSsh"];
+            };
+        };
+        responses: {
+            /** @description Record that SSH through Cloudflare was set up and tested (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    get_v1_cloudflare_ssh_script: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Script that makes the server trust Cloudflare SSH certificates (admin) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SshScript"];
+                };
+            };
+        };
+    };
+    post_v1_cloudflare_tunnel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateTunnel"];
+            };
+        };
+        responses: {
+            /** @description Create the tunnel and start its replicas (admin, write) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
+            };
+        };
+    };
+    delete_v1_cloudflare_tunnel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remove the tunnel, its DNS records, Access applications, and replicas (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeardownReport"];
+                };
+            };
+        };
+    };
+    post_v1_cloudflare_tunnel_publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Publish every domain through the tunnel and point DNS at it (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncReport"];
+                };
+            };
+        };
+    };
+    put_v1_cloudflare_tunnel_replicas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetReplicas"];
+            };
+        };
+        responses: {
+            /** @description Set the number of tunnel replicas, 1 to 5 (admin, write) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CloudflareStatus"];
+                };
             };
         };
     };
