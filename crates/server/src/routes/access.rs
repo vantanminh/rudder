@@ -1593,6 +1593,7 @@ async fn edge_gate(
         .and_then(|value| value.split(',').next().map(|item| item.trim().to_owned()))
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "unknown".into());
+    let ip = auth::tunnel_client_ip(&headers, &ip).unwrap_or(ip);
     if forwarded(&headers, "x-forwarded-proto").as_deref() == Some("http") {
         state
             .edge
