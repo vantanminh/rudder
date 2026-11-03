@@ -8,6 +8,7 @@ mod backup;
 mod buildspec;
 mod cache;
 mod certs;
+mod cloudflare;
 mod compose;
 mod crypto;
 mod database;
@@ -58,6 +59,15 @@ pub use cache::{
 pub use certs::{
     certificate_matches_host, describe as describe_certificate, matching_certificate,
     validate_key_and_chain, CertificateDetails, HostMatch,
+};
+pub use cloudflare::{
+    access_certs_url, access_issuer, can_close_ports, cloudflared_spec, host_in_zone,
+    normalize_team_domain, plan_dns, preflight, replica_container_name, sshd_trust_script,
+    tunnel_cname, tunnel_config, tunnel_origin, validate_access_email, validate_cloudflare_id,
+    validate_replicas, validate_ssh_ca_public_key, validate_unix_user, verify_access_jwt,
+    AccessClaims, DnsAction, DnsRecord, PreflightCheck, PreflightInput,
+    CLOUDFLARED_CONTAINER_PREFIX, CLOUDFLARED_LABEL, CLOUDFLARED_METRICS_PORT,
+    DEFAULT_CLOUDFLARED_IMAGE, MAX_TUNNEL_REPLICAS,
 };
 pub use compose::{
     compose_args, docker_config_with_logins, ComposeAction, ComposeOptions, LogSink,
