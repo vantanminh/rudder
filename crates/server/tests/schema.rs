@@ -65,6 +65,7 @@ const REQUIRED_TABLES: &[&str] = &[
     "security_findings",
     "ssl_events",
     "edge_counters",
+    "cloudflare_settings",
 ];
 
 fn test_config(database_url: &str) -> rudder_server::Config {
