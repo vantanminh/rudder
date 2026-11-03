@@ -396,10 +396,15 @@ impl Cf {
     /// The account's SSH certificate authority public key, created when missing.
     pub async fn ssh_ca(&self, account_id: &str) -> Result<String, ApiError> {
         let path = format!("/accounts/{account_id}/access/gateway_ca");
-        let existing = self
-            .call(Method::GET, &path, None)
-            .await
-            .map_err(|e| e.into_api("reading the SSH certificate authority"))?;
+        // An account that never had one answers 12112 `gateway_ca_not_found`
+        // (HTTP 404) instead of an empty list; either way the next step creates it.
+        let existing = match self.call(Method::GET, &path, None).await {
+            Ok(value) => value,
+            Err(error) if error.status == 404 || error.message.contains("code 12112") => {
+                Value::Null
+            }
+            Err(error) => return Err(error.into_api("reading the SSH certificate authority")),
+        };
         let key_of = |value: &Value| {
             value
                 .get("public_key")

@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Fixed
+- **SSH through Cloudflare works on an account with no SSH certificate authority yet.** Setting it up failed with "gateway_ca_not_found (code 12112)"; Rudder now creates the authority when Cloudflare says there is none.
+
 ## [0.6.0] - 2026-11-03
 
 ### Added

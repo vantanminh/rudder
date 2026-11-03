@@ -176,8 +176,16 @@ async fn delete_app(
     ok(json!({ "id": id }))
 }
 
-async fn gateway_ca_list() -> Json<Value> {
-    ok(json!([]))
+/// The real API reports an account without an SSH CA as an error, not an empty list.
+async fn gateway_ca_list() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({
+            "success": false,
+            "errors": [{ "code": 12112, "message": "access.api.error.gateway_ca_not_found" }],
+            "result": null
+        })),
+    )
 }
 
 async fn gateway_ca_create() -> Json<Value> {
