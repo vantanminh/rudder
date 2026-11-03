@@ -19,7 +19,7 @@ The address Rudder gives agents is the panel domain saved under **Certificates â
 | --- | --- |
 | **Full control** | Read and change every setting and all data, including users, tokens, and updates. |
 | **Read everything** | Read every setting and all data. Cannot change anything. |
-| **Operate** | Deploy and manage apps, domains, databases, stacks, caches, logs, monitors, Rudder Access, and security checks. Cannot change users, tokens, backups, or panel updates. |
+| **Operate** | Deploy and manage apps, domains, databases, stacks, caches, logs, monitors, Rudder Access, and security checks. Can read the Cloudflare Zero Trust settings but not change them. Cannot change users, tokens, backups, or panel updates. |
 | **Watch** | Read health, logs, metrics, cache stats, and security checks. |
 | **Custom** | Only the boxes you tick. A write permission includes the matching read permission. |
 
