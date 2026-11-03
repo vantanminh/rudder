@@ -42,18 +42,22 @@ const GROUPS: &[(&str, &str)] = &[
         "Rudder Access people, departments, and app sign-in",
     ),
     ("security", "Security checks, SSL activity, and rate limits"),
+    (
+        "cloudflare",
+        "Cloudflare tunnel, Access, and SSH for the optional Zero Trust mode",
+    ),
 ];
 
 /// Every scope an agent can be given. Order is the order shown in the panel.
 pub static MCP_SCOPES: &[McpScope] = &build_scopes();
 
-const fn build_scopes() -> [McpScope; 28] {
+const fn build_scopes() -> [McpScope; 30] {
     let mut scopes = [McpScope {
         id: "",
         group: "",
         write: false,
         summary: "",
-    }; 28];
+    }; 30];
     let mut index = 0;
     let mut group_index = 0;
     while group_index < GROUPS.len() {
@@ -93,6 +97,7 @@ const fn read_id(group: &'static str) -> &'static str {
         b"system" => "system:read",
         b"access" => "access:read",
         b"security" => "security:read",
+        b"cloudflare" => "cloudflare:read",
         _ => "",
     }
 }
@@ -113,6 +118,7 @@ const fn write_id(group: &'static str) -> &'static str {
         b"system" => "system:write",
         b"access" => "access:write",
         b"security" => "security:write",
+        b"cloudflare" => "cloudflare:write",
         _ => "",
     }
 }
@@ -155,7 +161,7 @@ const OPERATOR_WRITE: &[&str] = &[
     "access",
     "security",
 ];
-const OPERATOR_READ_ONLY: &[&str] = &["backups", "system"];
+const OPERATOR_READ_ONLY: &[&str] = &["backups", "system", "cloudflare"];
 const OBSERVER: &[&str] = &[
     "catalog",
     "logs",
@@ -285,6 +291,8 @@ mod tests {
         assert!(scopes.contains(&"access:read"));
         assert!(scopes.contains(&"access:write"));
         assert!(scopes.contains(&"security:write"));
+        assert!(scopes.contains(&"cloudflare:read"));
+        assert!(!scopes.contains(&"cloudflare:write"));
         let watch = scopes_for_template("observer").unwrap();
         assert!(watch.iter().all(|id| id.ends_with(":read")));
         assert!(watch.contains(&"logs:read"));

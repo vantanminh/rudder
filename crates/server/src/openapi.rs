@@ -6,6 +6,7 @@ use utoipa::openapi::{OpenApi, Ref};
 use utoipa::{Modify, OpenApi as OpenApiDerive};
 
 use crate::backup::RestoreRequest;
+use crate::cloudflare::{DnsOutcome, SkippedHost, SyncReport};
 use crate::deploy::DeploymentView;
 use crate::guard::{GuardSettings, GuardView, ProtectionView};
 use crate::logs::retention::{MetricsRetention, RetentionSettings};
@@ -38,6 +39,11 @@ use crate::routes::catalog::{
     EnvironmentView, ImportEnv, ImportEnvEntry, ImportEnvError, ImportEnvResult, NetworkView,
     ProjectView, PutEnvVar, ServerView, ServiceSummary, ServiceView, UpdateNetwork, UpdateServer,
     UpdateService, VerifyEnvResult, VerifyEnvVar,
+};
+use crate::routes::cloudflare::{
+    CloudflareStatus, ConfirmSsh, CreateTunnel, PreflightCheckView, PublishRequest, Readiness,
+    SaveCredentials, SetEnforcement, SetReplicas, SetupAccess, SetupSsh, SshScript, SshSetup,
+    TeardownReport,
 };
 use crate::routes::databases::{
     ConnectionView, CreateDatabase, DatabaseEngineView, LifecycleView, LogsView, UpdateDatabase,
@@ -218,6 +224,23 @@ use rudder_core::{
         AccessIntrospectRequest,
         AccessDepartmentGrant,
         AccessIntrospect,
+        CloudflareStatus,
+        SaveCredentials,
+        CreateTunnel,
+        SetReplicas,
+        PublishRequest,
+        SyncReport,
+        DnsOutcome,
+        SkippedHost,
+        TeardownReport,
+        SetupAccess,
+        SetEnforcement,
+        SetupSsh,
+        SshSetup,
+        SshScript,
+        ConfirmSsh,
+        Readiness,
+        PreflightCheckView,
         SecurityOverview,
         SslCertificateStat,
         SslSummary,
@@ -2029,6 +2052,19 @@ pub(crate) const ROUTES: &[Route] = &[
     Route { path: "/api/v1/security/rate-limits/{id}", method: HttpMethod::Delete, tag: "security", summary: "Delete a shared rate limit rule (admin, write)", request: None, response: None, status: 204 },
     Route { path: "/api/v1/security/rate-limits/stats", method: HttpMethod::Get, tag: "security", summary: "Allowed and blocked requests for the last day", request: None, response: Some("[RateLimitStat]"), status: 200 },
     Route { path: "/api/v1/security/edge", method: HttpMethod::Get, tag: "security", summary: "HTTP and raw-IP request counts, and recent rate-limit blocks", request: None, response: Some("EdgeStats"), status: 200 },
+    Route { path: "/api/v1/cloudflare", method: HttpMethod::Get, tag: "cloudflare", summary: "Cloudflare Zero Trust settings and tunnel status (admin)", request: None, response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/credentials", method: HttpMethod::Put, tag: "cloudflare", summary: "Save the Cloudflare account, zone, and API token after checking them (admin, write)", request: Some("SaveCredentials"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Post, tag: "cloudflare", summary: "Create the tunnel and start its replicas (admin, write)", request: Some("CreateTunnel"), response: Some("CloudflareStatus"), status: 201 },
+    Route { path: "/api/v1/cloudflare/tunnel", method: HttpMethod::Delete, tag: "cloudflare", summary: "Remove the tunnel, its DNS records, Access applications, and replicas (admin, write)", request: None, response: Some("TeardownReport"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel/replicas", method: HttpMethod::Put, tag: "cloudflare", summary: "Set the number of tunnel replicas, 1 to 5 (admin, write)", request: Some("SetReplicas"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/tunnel/publish", method: HttpMethod::Post, tag: "cloudflare", summary: "Publish every domain through the tunnel and point DNS at it (admin, write)", request: Some("PublishRequest"), response: Some("SyncReport"), status: 200 },
+    Route { path: "/api/v1/cloudflare/access", method: HttpMethod::Put, tag: "cloudflare", summary: "Protect the panel domain with Cloudflare Access (admin, write)", request: Some("SetupAccess"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/access/enforcement", method: HttpMethod::Put, tag: "cloudflare", summary: "Require a valid Cloudflare Access token for the panel domain (admin, write)", request: Some("SetEnforcement"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/ssh", method: HttpMethod::Put, tag: "cloudflare", summary: "Set up SSH through Access for Infrastructure and return the server script (admin, write)", request: Some("SetupSsh"), response: Some("SshSetup"), status: 200 },
+    Route { path: "/api/v1/cloudflare/ssh", method: HttpMethod::Delete, tag: "cloudflare", summary: "Remove the SSH route, target, and application (admin, write)", request: None, response: None, status: 204 },
+    Route { path: "/api/v1/cloudflare/ssh/script", method: HttpMethod::Get, tag: "cloudflare", summary: "Script that makes the server trust Cloudflare SSH certificates (admin)", request: None, response: Some("SshScript"), status: 200 },
+    Route { path: "/api/v1/cloudflare/ssh/confirmation", method: HttpMethod::Put, tag: "cloudflare", summary: "Record that SSH through Cloudflare was set up and tested (admin, write)", request: Some("ConfirmSsh"), response: Some("CloudflareStatus"), status: 200 },
+    Route { path: "/api/v1/cloudflare/preflight", method: HttpMethod::Get, tag: "cloudflare", summary: "Checks that must pass before the public ports are closed (admin)", request: None, response: Some("Readiness"), status: 200 },
 ];
 
 fn add(doc: &mut OpenApi, route: &Route) {

@@ -162,7 +162,7 @@ fn b64url(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -289,7 +289,7 @@ mod tests {
         assert!(github_app_jwt("app", pem, 1_700_000_000).is_err());
     }
 
-    const TEST_APP_KEY: &str = "-----BEGIN PRIVATE KEY-----
+    pub(crate) const TEST_APP_KEY: &str = "-----BEGIN PRIVATE KEY-----
 MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDMm3BWuPw2Hlpa
 /TRK53FVFVMQAu4YEIgfe6UxBgWcDEIQK98obYe7y3D7+pwutdqcjjNpZiNX6mRx
 VZqqMFwVfTDIKGIslUEIuJrwhGrVhXBiJFH32Lhi/N0a9elm4qKyvknri1ZnpORe

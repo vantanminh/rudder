@@ -133,12 +133,35 @@ fn is_ipv4(value: &str) -> bool {
     })
 }
 
+/// How traffic reaches Traefik on a server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EdgeMode {
+    /// Visitors connect to ports 80 and 443 directly. Routes follow their SSL mode.
+    #[default]
+    Direct,
+    /// Only `cloudflared` connects, over HTTPS on the proxy network. Every route is
+    /// served on `websecure` with the default certificate store: Cloudflare shows the
+    /// public certificate, no ACME request is made, and nothing redirects to HTTPS.
+    Tunnel,
+}
+
 /// Render the file-provider document. Inputs are validated so the YAML cannot be injected.
 pub fn render_dynamic_config(
     routes: &[ProxyRoute],
     certs: &[TlsMaterial],
     gate: Option<&EdgeGate>,
 ) -> Result<String, Error> {
+    render_dynamic_config_for(routes, certs, gate, EdgeMode::Direct)
+}
+
+/// Like [`render_dynamic_config`], for a server reached directly or through a tunnel.
+pub fn render_dynamic_config_for(
+    routes: &[ProxyRoute],
+    certs: &[TlsMaterial],
+    gate: Option<&EdgeGate>,
+    mode: EdgeMode,
+) -> Result<String, Error> {
+    let tunnel = mode == EdgeMode::Tunnel;
     // Traefik's file provider rejects empty sections such as `middlewares: {}`,
     // so only sections with entries are written.
     let needs_gate = routes
@@ -166,7 +189,8 @@ pub fn render_dynamic_config(
         routers.push_str(&format!("    {}:\n", route.name));
         routers.push_str(&format!("      rule: \"{rule}\"\n"));
         routers.push_str(&format!("      service: {}\n", route.name));
-        write_tls(&mut routers, route.tls);
+        let tls = if tunnel { TlsMode::Custom } else { route.tls };
+        write_tls(&mut routers, tls);
         let mut middleware_names = Vec::new();
         if route.gate {
             middleware_names.push("rudder-gate".to_owned());
@@ -178,7 +202,7 @@ pub fn render_dynamic_config(
             middlewares.push_str(&format!("          - \"{user}:{hash}\"\n"));
         }
         write_middlewares(&mut routers, &middleware_names);
-        if route.https_redirect && route.tls != TlsMode::None {
+        if route.https_redirect && route.tls != TlsMode::None && !tunnel {
             routers.push_str(&format!("    {}-http:\n", route.name));
             routers.push_str(&format!("      rule: \"{rule}\"\n"));
             routers.push_str("      entryPoints:\n        - web\n");
@@ -203,7 +227,10 @@ pub fn render_dynamic_config(
             ));
             routers.push_str("      priority: 1000\n");
             routers.push_str("      service: rudder-panel\n");
-            write_tls(&mut routers, route.tls);
+            write_tls(
+                &mut routers,
+                if tunnel { TlsMode::Custom } else { route.tls },
+            );
         }
         services.push_str(&format!("    {}:\n", route.name));
         services.push_str("      loadBalancer:\n        servers:\n");
@@ -370,6 +397,38 @@ mod tests {
             gate: false,
             access_handoff: false,
         }
+    }
+
+    #[test]
+    fn a_tunnel_serves_every_route_on_websecure_without_acme_or_redirects() {
+        let mut http_only = route(TlsMode::None);
+        http_only.name = "rplain".into();
+        http_only.host = "plain.example.com".into();
+        let mut gated = route(TlsMode::LetsEncrypt);
+        gated.name = "rgate".into();
+        gated.host = "gate.example.com".into();
+        gated.access_handoff = true;
+        let gate = EdgeGate {
+            secret: "ab".repeat(16),
+            panel_container: "rudder".into(),
+            panel_port: 3000,
+        };
+        let routes = [route(TlsMode::LetsEncrypt), http_only, gated];
+        let direct = render_dynamic_config(&routes, &[], Some(&gate)).unwrap();
+        assert!(direct.contains("certResolver: letsencrypt"));
+        assert!(direct.contains("redirectScheme"));
+        let tunneled =
+            render_dynamic_config_for(&routes, &[], Some(&gate), EdgeMode::Tunnel).unwrap();
+        assert!(!tunneled.contains("certResolver"));
+        assert!(!tunneled.contains("redirectScheme"));
+        assert!(!tunneled.contains(
+            "- web
+"
+        ));
+        assert!(!tunneled.contains("-http:"));
+        assert_eq!(tunneled.matches("- websecure").count(), 4);
+        assert_eq!(tunneled.matches("tls: {}").count(), 4);
+        assert!(tunneled.contains("PathPrefix(`/_rudder`)"));
     }
 
     #[test]

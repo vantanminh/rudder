@@ -4,9 +4,11 @@ import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { Button, Card, Field, Tabs, TextInput } from "../components/ui";
 import { useT } from "../i18n";
+
+import { CloudflarePanel } from "./CloudflarePanel";
 import type { Schemas } from "../types";
 
-type Tab = "overview" | "ssl" | "checks" | "limits";
+type Tab = "overview" | "ssl" | "checks" | "limits" | "cloudflare";
 
 export function SecurityPage() {
   const t = useT();
@@ -23,6 +25,8 @@ export function SecurityPage() {
           ["ssl", "SSL"],
           ["checks", "Checks"],
           ["limits", "Rate limits"],
+
+          ["cloudflare", "Cloudflare"],
         ]}
         active={tab}
         onChange={setTab}
@@ -31,6 +35,8 @@ export function SecurityPage() {
       {tab === "ssl" ? <Ssl /> : null}
       {tab === "checks" ? <Checks /> : null}
       {tab === "limits" ? <Limits /> : null}
+
+      {tab === "cloudflare" ? <CloudflarePanel /> : null}
     </>
   );
 }

@@ -4,6 +4,7 @@ pub mod agents;
 pub mod backups;
 pub mod cache;
 pub mod catalog;
+pub mod cloudflare;
 pub mod databases;
 pub mod edge;
 pub mod git;

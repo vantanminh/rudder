@@ -162,11 +162,46 @@ impl FromRequestParts<AppState> for OptionalPeer {
     }
 }
 
+/// True while Traefik serves the panel and apps through a Cloudflare tunnel.
+static TUNNEL_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn set_tunnel_mode(on: bool) {
+    TUNNEL_MODE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The visitor's address as Cloudflare saw it, when the request arrived through
+/// the tunnel. `hop` is the address that connected to us (the first forwarded
+/// address or the peer); the header is trusted only when that hop is on a
+/// private network, which is where the tunnel's connector lives. A client that
+/// reaches Traefik directly comes from a public address and cannot spoof it.
+pub fn tunnel_client_ip(headers: &HeaderMap, hop: &str) -> Option<String> {
+    if !TUNNEL_MODE.load(std::sync::atomic::Ordering::Relaxed) {
+        return None;
+    }
+    let hop: std::net::IpAddr = hop.parse().ok()?;
+    let private = match hop {
+        std::net::IpAddr::V4(ip) => ip.is_private() || ip.is_loopback() || ip.is_link_local(),
+        std::net::IpAddr::V6(ip) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
+    };
+    if !private {
+        return None;
+    }
+    let real: std::net::IpAddr = headers
+        .get("cf-connecting-ip")?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(real.to_string())
+}
+
 pub fn client_ip(
     headers: &HeaderMap,
     peer: Option<std::net::SocketAddr>,
     trust_proxy: bool,
 ) -> String {
+    let mut hop = peer.map(|addr| addr.ip().to_string());
     if trust_proxy {
         if let Some(forwarded) = headers
             .get("x-forwarded-for")
@@ -175,13 +210,18 @@ pub fn client_ip(
             if let Some(first) = forwarded.split(',').next() {
                 let ip = first.trim();
                 if !ip.is_empty() {
-                    return ip.to_owned();
+                    hop = Some(ip.to_owned());
                 }
             }
         }
     }
-    peer.map(|addr| addr.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_owned())
+    if let Some(real) = hop
+        .as_deref()
+        .and_then(|hop| tunnel_client_ip(headers, hop))
+    {
+        return real;
+    }
+    hop.unwrap_or_else(|| "unknown".to_owned())
 }
 
 pub fn session_cookie(token: &str, secure: bool) -> Cookie<'static> {
@@ -460,5 +500,24 @@ mod tests {
         headers.insert("x-forwarded-for", "203.0.113.5, 10.0.0.1".parse().unwrap());
         assert_eq!(client_ip(&headers, None, true), "203.0.113.5");
         assert_eq!(client_ip(&headers, None, false), "unknown");
+    }
+
+    #[test]
+    fn the_cloudflare_address_is_trusted_only_from_a_private_hop() {
+        let mut headers = HeaderMap::new();
+        headers.insert("cf-connecting-ip", "198.51.100.7".parse().unwrap());
+        headers.insert("x-forwarded-for", "172.18.0.5".parse().unwrap());
+        // Off by default: the header is ignored.
+        assert_eq!(client_ip(&headers, None, true), "172.18.0.5");
+        set_tunnel_mode(true);
+        assert_eq!(client_ip(&headers, None, true), "198.51.100.7");
+        // A public hop reached Traefik directly and could have forged the header.
+        headers.insert("x-forwarded-for", "203.0.113.9".parse().unwrap());
+        assert_eq!(client_ip(&headers, None, true), "203.0.113.9");
+        // A malformed value is ignored.
+        headers.insert("x-forwarded-for", "172.18.0.5".parse().unwrap());
+        headers.insert("cf-connecting-ip", "not-an-ip".parse().unwrap());
+        assert_eq!(client_ip(&headers, None, true), "172.18.0.5");
+        set_tunnel_mode(false);
     }
 }

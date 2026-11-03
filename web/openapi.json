@@ -1517,6 +1517,340 @@
         }
       }
     },
+    "/api/v1/cloudflare": {
+      "get": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Cloudflare Zero Trust settings and tunnel status (admin)",
+        "operationId": "get_v1_cloudflare",
+        "responses": {
+          "200": {
+            "description": "Cloudflare Zero Trust settings and tunnel status (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/access": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Protect the panel domain with Cloudflare Access (admin, write)",
+        "operationId": "put_v1_cloudflare_access",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupAccess"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Protect the panel domain with Cloudflare Access (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/access/enforcement": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Require a valid Cloudflare Access token for the panel domain (admin, write)",
+        "operationId": "put_v1_cloudflare_access_enforcement",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEnforcement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Require a valid Cloudflare Access token for the panel domain (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/credentials": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Save the Cloudflare account, zone, and API token after checking them (admin, write)",
+        "operationId": "put_v1_cloudflare_credentials",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveCredentials"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Save the Cloudflare account, zone, and API token after checking them (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/preflight": {
+      "get": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Checks that must pass before the public ports are closed (admin)",
+        "operationId": "get_v1_cloudflare_preflight",
+        "responses": {
+          "200": {
+            "description": "Checks that must pass before the public ports are closed (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/ssh": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Set up SSH through Access for Infrastructure and return the server script (admin, write)",
+        "operationId": "put_v1_cloudflare_ssh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupSsh"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Set up SSH through Access for Infrastructure and return the server script (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshSetup"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Remove the SSH route, target, and application (admin, write)",
+        "operationId": "delete_v1_cloudflare_ssh",
+        "responses": {
+          "204": {
+            "description": "Remove the SSH route, target, and application (admin, write)"
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/ssh/confirmation": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Record that SSH through Cloudflare was set up and tested (admin, write)",
+        "operationId": "put_v1_cloudflare_ssh_confirmation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmSsh"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Record that SSH through Cloudflare was set up and tested (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/ssh/script": {
+      "get": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Script that makes the server trust Cloudflare SSH certificates (admin)",
+        "operationId": "get_v1_cloudflare_ssh_script",
+        "responses": {
+          "200": {
+            "description": "Script that makes the server trust Cloudflare SSH certificates (admin)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SshScript"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/tunnel": {
+      "post": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Create the tunnel and start its replicas (admin, write)",
+        "operationId": "post_v1_cloudflare_tunnel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTunnel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Create the tunnel and start its replicas (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Remove the tunnel, its DNS records, Access applications, and replicas (admin, write)",
+        "operationId": "delete_v1_cloudflare_tunnel",
+        "responses": {
+          "200": {
+            "description": "Remove the tunnel, its DNS records, Access applications, and replicas (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeardownReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/tunnel/publish": {
+      "post": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Publish every domain through the tunnel and point DNS at it (admin, write)",
+        "operationId": "post_v1_cloudflare_tunnel_publish",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Publish every domain through the tunnel and point DNS at it (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncReport"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cloudflare/tunnel/replicas": {
+      "put": {
+        "tags": [
+          "cloudflare"
+        ],
+        "summary": "Set the number of tunnel replicas, 1 to 5 (admin, write)",
+        "operationId": "put_v1_cloudflare_tunnel_replicas",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetReplicas"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Set the number of tunnel replicas, 1 to 5 (admin, write)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudflareStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/database-engines": {
       "get": {
         "tags": [
@@ -6494,6 +6828,134 @@
           }
         }
       },
+      "CloudflareStatus": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "zone_id",
+          "zone_name",
+          "token_saved",
+          "tunnel_name",
+          "replicas",
+          "replicas_running",
+          "max_replicas",
+          "tunnel_published",
+          "published_hosts",
+          "team_domain",
+          "access_emails",
+          "access_configured",
+          "access_enforced",
+          "agent_bypass",
+          "ssh_address",
+          "ssh_users",
+          "ssh_configured",
+          "ssh_ready",
+          "ssh_ca_public_key"
+        ],
+        "properties": {
+          "access_configured": {
+            "type": "boolean"
+          },
+          "access_emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "access_enforced": {
+            "type": "boolean"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "agent_bypass": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Connections Cloudflare sees for the tunnel; `None` when it could not be read.",
+            "minimum": 0
+          },
+          "max_replicas": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "panel_domain": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published_hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replica_error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the replicas could not be started, when the last create or scale failed."
+          },
+          "replicas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "replicas_running": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ssh_address": {
+            "type": "string"
+          },
+          "ssh_ca_public_key": {
+            "type": "string"
+          },
+          "ssh_configured": {
+            "type": "boolean"
+          },
+          "ssh_ready": {
+            "type": "boolean"
+          },
+          "ssh_users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "team_domain": {
+            "type": "string"
+          },
+          "token_saved": {
+            "type": "boolean",
+            "description": "True once an API token is saved. The token itself is never returned."
+          },
+          "tunnel_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tunnel_name": {
+            "type": "string"
+          },
+          "tunnel_published": {
+            "type": "boolean"
+          },
+          "zone_id": {
+            "type": "string"
+          },
+          "zone_name": {
+            "type": "string"
+          }
+        }
+      },
       "CompleteGithubApp": {
         "type": "object",
         "required": [
@@ -6564,6 +7026,18 @@
             "type": "integer",
             "description": "Agents and caches queued for an update.",
             "minimum": 0
+          }
+        }
+      },
+      "ConfirmSsh": {
+        "type": "object",
+        "required": [
+          "confirmed"
+        ],
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "description": "True once the script ran on the server and a connection through Cloudflare worked."
           }
         }
       },
@@ -6987,6 +7461,19 @@
           }
         }
       },
+      "CreateTunnel": {
+        "type": "object",
+        "properties": {
+          "replicas": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Number of `cloudflared` replicas, 1 to 5. Defaults to 2."
+          }
+        }
+      },
       "CreateUser": {
         "type": "object",
         "required": [
@@ -7284,6 +7771,28 @@
             "type": "boolean"
           },
           "region": {
+            "type": "string"
+          }
+        }
+      },
+      "DnsOutcome": {
+        "type": "object",
+        "required": [
+          "host",
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "`created`, `kept`, `replaced`, or `conflict`."
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "host": {
             "type": "string"
           }
         }
@@ -8894,6 +9403,30 @@
           }
         }
       },
+      "PreflightCheckView": {
+        "type": "object",
+        "required": [
+          "id",
+          "ok",
+          "required",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean",
+            "description": "A failing required check blocks closing the public ports."
+          }
+        }
+      },
       "PreviewDomain": {
         "type": "object",
         "properties": {
@@ -8983,6 +9516,15 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "PublishRequest": {
+        "type": "object",
+        "properties": {
+          "overwrite_dns": {
+            "type": "boolean",
+            "description": "Replace an existing A, AAAA, or CNAME record with the tunnel's. Off by default."
           }
         }
       },
@@ -9090,6 +9632,32 @@
           "window_secs": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "Readiness": {
+        "type": "object",
+        "required": [
+          "ready",
+          "checks",
+          "skipped"
+        ],
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreflightCheckView"
+            }
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "True when every required check passes, so the installer may close the ports."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedHost"
+            }
           }
         }
       },
@@ -9675,6 +10243,30 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "SaveCredentials": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "zone_id"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "description": "32-character Cloudflare account id."
+          },
+          "api_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "API token. Leave out to keep the saved one."
+          },
+          "zone_id": {
+            "type": "string",
+            "description": "32-character id of the zone the hostnames live in."
           }
         }
       },
@@ -10376,6 +10968,53 @@
           }
         }
       },
+      "SetEnforcement": {
+        "type": "object",
+        "required": [
+          "enforced"
+        ],
+        "properties": {
+          "enforced": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetReplicas": {
+        "type": "object",
+        "required": [
+          "replicas"
+        ],
+        "properties": {
+          "replicas": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "SetupAccess": {
+        "type": "object",
+        "required": [
+          "team_domain",
+          "emails"
+        ],
+        "properties": {
+          "agent_bypass": {
+            "type": "boolean",
+            "description": "Let AI agents and API clients reach `/mcp`, `/oauth`, `/.well-known`, and\n`/api/health` without an Access login. They still need their own tokens."
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Email addresses allowed through Cloudflare Access."
+          },
+          "team_domain": {
+            "type": "string",
+            "description": "Your Zero Trust team domain, such as `myteam.cloudflareaccess.com` or just `myteam`."
+          }
+        }
+      },
       "SetupRequest": {
         "type": "object",
         "required": [
@@ -10397,6 +11036,26 @@
           }
         }
       },
+      "SetupSsh": {
+        "type": "object",
+        "required": [
+          "address",
+          "users"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "IPv4 address `cloudflared` reaches the server's SSH daemon on, for\nexample the Docker gateway of the `rudder-proxy` network."
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unix accounts Cloudflare may log people in as."
+          }
+        }
+      },
       "SetupStatus": {
         "type": "object",
         "required": [
@@ -10405,6 +11064,21 @@
         "properties": {
           "needs_setup": {
             "type": "boolean"
+          }
+        }
+      },
+      "SkippedHost": {
+        "type": "object",
+        "required": [
+          "host",
+          "reason"
+        ],
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
           }
         }
       },
@@ -10462,6 +11136,33 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "SshScript": {
+        "type": "object",
+        "required": [
+          "script"
+        ],
+        "properties": {
+          "script": {
+            "type": "string"
+          }
+        }
+      },
+      "SshSetup": {
+        "type": "object",
+        "required": [
+          "status",
+          "script"
+        ],
+        "properties": {
+          "script": {
+            "type": "string",
+            "description": "Run as root on the server so `sshd` trusts Cloudflare's certificates."
+          },
+          "status": {
+            "$ref": "#/components/schemas/CloudflareStatus"
           }
         }
       },
@@ -10794,6 +11495,40 @@
           }
         }
       },
+      "SyncReport": {
+        "type": "object",
+        "required": [
+          "hostnames",
+          "skipped",
+          "dns",
+          "pending"
+        ],
+        "properties": {
+          "dns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DnsOutcome"
+            }
+          },
+          "hostnames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pending": {
+            "type": "integer",
+            "description": "Hostnames whose DNS record Rudder did not change.",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedHost"
+            }
+          }
+        }
+      },
       "SystemInfo": {
         "type": "object",
         "required": [
@@ -10821,6 +11556,29 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "TeardownReport": {
+        "type": "object",
+        "required": [
+          "removed_dns",
+          "warnings"
+        ],
+        "properties": {
+          "removed_dns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Hostnames whose DNS record Rudder removed. Point them back at this server."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Steps that did not finish; the rest was removed."
           }
         }
       },

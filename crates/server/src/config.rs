@@ -74,6 +74,10 @@ pub struct Config {
     pub google_token_url: String,
     /// Google userinfo endpoint. Release builds always use Google.
     pub google_userinfo_url: String,
+    /// Cloudflare API base for tunnels, DNS, and Access. Release builds always use Cloudflare.
+    pub cloudflare_api_url: String,
+    /// Image the tunnel replicas run.
+    pub cloudflared_image: String,
 }
 
 /// Release signing key compiled into official builds.
@@ -274,6 +278,16 @@ impl Config {
             "RUDDER_GOOGLE_USERINFO_URL",
             "https://openidconnect.googleapis.com/v1/userinfo",
         )?;
+        let cloudflare_api_url = debug_url(
+            vars,
+            "RUDDER_CLOUDFLARE_API_URL",
+            "https://api.cloudflare.com/client/v4",
+        )?;
+        let cloudflared_image = vars
+            .get("RUDDER_CLOUDFLARED_IMAGE")
+            .cloned()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| rudder_core::DEFAULT_CLOUDFLARED_IMAGE.to_owned());
         Ok(Self {
             database_url,
             bind,
@@ -302,6 +316,8 @@ impl Config {
             turnstile_siteverify_url,
             google_token_url,
             google_userinfo_url,
+            cloudflare_api_url,
+            cloudflared_image,
         })
     }
 }

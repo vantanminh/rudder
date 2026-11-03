@@ -88,6 +88,8 @@ function areaLabel(t: (key: string) => string, group: string): string {
       return t("Rudder Access people, departments, and app sign-in");
     case "security":
       return t("Security checks, SSL activity, and rate limits");
+    case "cloudflare":
+      return t("Cloudflare tunnel, Access, and SSH for the optional Zero Trust mode");
     default:
       return t("Panel settings, load, and updates");
   }

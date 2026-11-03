@@ -4,7 +4,8 @@ use std::fmt::Write as _;
 
 use chrono::{DateTime, Utc};
 use rudder_core::{
-    render_dynamic_config, EdgeGate, NodeDriver, ProxyRoute, TlsMaterial, TlsMode, TRAEFIK_CERT_DIR,
+    render_dynamic_config_for, EdgeGate, EdgeMode, NodeDriver, ProxyRoute, TlsMaterial, TlsMode,
+    TRAEFIK_CERT_DIR,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -84,7 +85,13 @@ pub async fn publish_server(state: &AppState, server_id: Uuid) -> Result<bool, A
         .await
         .map_err(core_error)?;
     let materials = write_certificates(state, driver.as_ref()).await?;
-    let document = render_dynamic_config(&yaml.0, &materials, gate.as_ref()).map_err(core_error)?;
+    let mode = if kind == "local" && crate::cloudflare::tunnel_published(&state.pool).await {
+        EdgeMode::Tunnel
+    } else {
+        EdgeMode::Direct
+    };
+    let document =
+        render_dynamic_config_for(&yaml.0, &materials, gate.as_ref(), mode).map_err(core_error)?;
     let mut body = document;
     if !yaml.1.is_empty() {
         let _ = write!(body, "\n# panel certificate {}\n", yaml.1);
