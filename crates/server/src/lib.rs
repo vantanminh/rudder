@@ -9,6 +9,7 @@ mod auth;
 mod backup;
 mod build_queue;
 mod cache;
+mod cloudflare;
 mod config;
 mod db;
 mod deploy;
@@ -87,6 +88,7 @@ pub async fn run(config: Config) -> anyhow::Result<()> {
 
     let addr = config.bind;
     let state = AppState::new(pool, config);
+    cloudflare::refresh_mode(&state).await;
     logs::layer::install(state.logs.sender());
     start_log_pipeline(&state);
     let retention_pool = state.pool.clone();
@@ -312,6 +314,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::account::router())
         .merge(routes::access::router())
         .merge(routes::security::router())
+        .merge(routes::cloudflare::router())
         .merge(routes::catalog::router())
         .merge(routes::edge::router())
         .merge(routes::panel_ssl::router())
@@ -347,8 +350,12 @@ pub fn router(state: AppState) -> axum::Router {
             state.clone(),
             security::middleware,
         ))
-        .with_state(state)
+        .with_state(state.clone())
         .fallback(embed::spa)
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            cloudflare::enforce_access,
+        ))
 }
 
 async fn shutdown_signal() {

@@ -44,6 +44,8 @@ pub struct AppState {
     pub guard: Arc<crate::guard::LoadGuard>,
     /// Rate-limit buckets and counters for the edge gate.
     pub edge: Arc<crate::gate::EdgeMemory>,
+    /// Cached Cloudflare Access settings and signing keys.
+    pub cloudflare: Arc<crate::cloudflare::Runtime>,
 }
 
 impl AppState {
@@ -75,6 +77,7 @@ impl AppState {
             stack_runs: Arc::default(),
             guard: Arc::default(),
             edge: crate::gate::memory(),
+            cloudflare: Arc::default(),
         }
     }
 }
