@@ -227,7 +227,10 @@ pub fn render_dynamic_config_for(
             ));
             routers.push_str("      priority: 1000\n");
             routers.push_str("      service: rudder-panel\n");
-            write_tls(&mut routers, route.tls);
+            write_tls(
+                &mut routers,
+                if tunnel { TlsMode::Custom } else { route.tls },
+            );
         }
         services.push_str(&format!("    {}:\n", route.name));
         services.push_str("      loadBalancer:\n        servers:\n");
