@@ -46,6 +46,10 @@ Traefik asks `GET /api/v1/edge/gate` before it forwards a gated domain. The gate
 
 Create and edit rules with `/api/v1/security/rate-limits`. Saving a rule republishes routing so the gate is attached to the domains it covers.
 
+## Cloudflare Zero Trust
+
+**Cloudflare** is an optional tab for putting the panel and the apps behind a Cloudflare Tunnel and Cloudflare Access, and reaching SSH through Cloudflare, so ports 80, 443, 3000, and 22 can be closed. It is off until you set it up. See [Cloudflare Zero Trust](cloudflare.md).
+
 ## API
 
 | Method | Path | Purpose |

@@ -8,6 +8,16 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Cloudflare Zero Trust, as an optional mode.** **Security → Cloudflare** can create a Cloudflare Tunnel with one to five replicas, publish the panel and every app domain through it (DNS records included), and put the panel behind Cloudflare Access with an email allow list. Nothing changes until you set it up, and every step can be undone. Full guide: `docs/cloudflare.md`.
+- **SSH through Cloudflare.** Optional short-lived SSH certificates through Cloudflare Access for Infrastructure, so no SSH keys are kept on the server. The panel shows a script to run as root that makes `sshd` trust Cloudflare; it never edits `sshd_config` itself.
+- **Close the public ports from the installer.** `install.sh --close-ports` stops Traefik from listening on 80 and 443 and keeps the panel on `127.0.0.1:3000`, once a tunnel replica is running; the choice survives upgrades. `install.sh --open-ports` undoes it. The panel shows a preflight checklist before you do.
+- **AI agents can manage it.** A new `cloudflare` permission scope covers the same operations through the API and MCP. Full control can change them; the Operate template can only read.
+
+### Changed
+- **Behind a tunnel, Rudder reads the visitor address from Cloudflare.** Rate limits, Rudder Access, and the audit log use the real visitor instead of Cloudflare's address. This only applies when the tunnel is on and the request comes from a private address.
+- **Domains published through the tunnel use Cloudflare's certificate.** Traefik serves them on HTTPS without Let's Encrypt and without an HTTP redirect, because port 80 can be closed.
+
 ### Fixed
 - **Re-running the installer protects the database and Traefik.** Containers created before they were protected kept a normal OOM score, so the panel showed "partly protected" and the kernel could stop them first. `install.sh` now recreates them (their data is kept). It also checks for the container itself, not a volume of the same name, so a missing database or Traefik container is created again.
 - **Re-running the installer no longer starts an old panel.** `install.sh` now pulls the newest `latest` panel image every time. Before, a copy pulled earlier was reused, and a panel updated since then stopped with "migration was previously applied but is missing".
