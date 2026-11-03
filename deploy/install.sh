@@ -11,6 +11,9 @@
 #   --backup FILE        Write an encrypted panel backup of a running installation to FILE
 #   --force              With --restore: replace an existing panel database and master key
 #   --no-docker-install  Fail instead of installing Docker when it is missing
+#   --close-ports        Stop publishing ports 80, 443, and 3000 (the panel stays on 127.0.0.1:3000);
+#                        for servers reached through a Cloudflare tunnel, which must be running
+#   --open-ports         Publish those ports again; this is the default
 #
 # The restore and backup passphrase is read from RUDDER_RESTORE_PASSPHRASE /
 # RUDDER_BACKUP_PASSPHRASE, or prompted for on the terminal. It never appears in argv.
@@ -32,6 +35,7 @@ restore=""
 backup=""
 force=0
 install_docker=1
+ports=""
 
 die() {
 	printf 'rudder: %s\n' "$1" >&2
@@ -81,8 +85,16 @@ while [ $# -gt 0 ]; do
 		install_docker=0
 		shift
 		;;
+	--close-ports)
+		ports="close"
+		shift
+		;;
+	--open-ports)
+		ports="open"
+		shift
+		;;
 	-h | --help)
-		sed -n '2,17p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'
+		sed -n '2,20p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'
 		exit 0
 		;;
 	*)
@@ -171,6 +183,24 @@ fi
 
 info "preparing $ETC and $DATA"
 install -d -m 0700 "$ETC"
+# Closing the ports is remembered, so upgrading later does not reopen them.
+if [ "$ports" = "close" ]; then
+	# Only a running tunnel replica makes it safe to stop listening publicly.
+	[ -n "$(docker ps -q --filter 'name=^rudder-cloudflared-' --filter status=running)" ] ||
+		die "no Cloudflare tunnel replica is running; set up the tunnel under Security -> Cloudflare first"
+	: >"$ETC/ports.closed"
+elif [ "$ports" = "open" ]; then
+	rm -f "$ETC/ports.closed"
+fi
+if [ -f "$ETC/ports.closed" ]; then
+	ports_closed=1
+	traefik_ports=""
+	panel_ports="-p 127.0.0.1:3000:3000 -p 7443:7443"
+else
+	ports_closed=0
+	traefik_ports="-p 80:80 -p 443:443"
+	panel_ports="-p 3000:3000 -p 7443:7443"
+fi
 install -d -m 0755 "$DATA" "$DATA/traefik" "$DATA/traefik/dynamic" "$DATA/traefik/certs" "$DATA/cache"
 [ -f "$DATA/traefik/acme.json" ] || install -m 0600 /dev/null "$DATA/traefik/acme.json"
 [ -f "$DATA/cache/rules.json" ] || printf '{"version":0,"sites":[],"policies":[]}\n' >"$DATA/cache/rules.json"
@@ -273,10 +303,23 @@ info "writing the Traefik configuration"
 	echo "        entryPoint: web"
 	[ -z "$email" ] || printf '      email: "%s"\n' "$email"
 } >"$DATA/traefik/traefik.yml"
+# Published ports cannot change on a running container, so Traefik is replaced
+# when it listens differently from what was asked for.
+if docker container inspect rudder-traefik >/dev/null 2>&1; then
+	listening=0
+	if docker container inspect -f '{{json .HostConfig.PortBindings}}' rudder-traefik | grep -q '"443/tcp"'; then
+		listening=1
+	fi
+	if [ "$listening" -eq "$ports_closed" ]; then
+		info "recreating rudder-traefik to change its published ports"
+		docker rm -f rudder-traefik >/dev/null
+	fi
+fi
 if ! docker container inspect rudder-traefik >/dev/null 2>&1; then
 	info "starting rudder-traefik"
+	# shellcheck disable=SC2086
 	docker run -d --name rudder-traefik --restart unless-stopped \
-		--network rudder-proxy -p 80:80 -p 443:443 \
+		--network rudder-proxy $traefik_ports \
 		--oom-score-adj -900 --cpu-shares 2048 --memory-reservation 64m \
 		-v "$DATA/traefik:/etc/rudder/traefik" \
 		"$TRAEFIK_IMAGE" --configFile=/etc/rudder/traefik/traefik.yml >/dev/null
@@ -320,7 +363,7 @@ docker rm -f "$PANEL" >/dev/null 2>&1 || true
 DATABASE_URL="$(database_url)" docker run -d --name "$PANEL" --restart unless-stopped \
 	--network rudder-internal \
 	--oom-score-adj -900 --cpu-shares 8192 --memory-reservation 128m \
-	-p 3000:3000 -p 7443:7443 \
+	$panel_ports \
 	-e DATABASE_URL \
 	-e RUDDER_MASTER_KEY_FILE=/etc/rudder/master.key \
 	-e RUDDER_DATA_DIR="$DATA" \
@@ -352,4 +395,5 @@ else
 	info "Rudder is running at $public_url; open it to sign in, or to create the first admin account on a new install"
 fi
 [ -z "$domain" ] || info "set the panel domain to $domain under Certificates so Traefik serves it over HTTPS"
+[ "$ports_closed" -eq 0 ] || info "ports 80, 443, and 3000 are closed; the panel is reachable only through Cloudflare, or on 127.0.0.1:3000 from this server. Run with --open-ports to undo"
 info "back up $ETC/master.key, or run: sh install.sh --backup rudder-panel.tar.zst.enc"
