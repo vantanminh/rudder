@@ -807,6 +807,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cli/auth/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a rudder CLI browser callback or 8-character device code login */
+        post: operations["post_v1_cli_auth_approve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/auth/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll a rudder CLI login request for the issued API token */
+        post: operations["post_v1_cli_auth_poll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/auth/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect a pending rudder CLI login request before approving it */
+        get: operations["get_v1_cli_auth_requests__id_"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cli/auth/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start a browser or 8-character device-code login flow for rudder CLI */
+        post: operations["post_v1_cli_auth_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cloudflare": {
         parameters: {
             query?: never;
@@ -1333,6 +1401,24 @@ export interface paths {
         put?: never;
         /** Start creating a GitHub App: the manifest and the github.com form address (admin, write) */
         post: operations["post_v1_github-app_manifest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-store/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rudder Image store settings (Cloudflare R2 / S3 destination and default retention) */
+        get: operations["get_v1_image-store_settings"];
+        /** Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images */
+        put: operations["put_v1_image-store_settings"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2498,6 +2584,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/services/{id}/image-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a service's Rudder Image auto-deploy and R2 retention policy */
+        get: operations["get_v1_services__id__image-policy"];
+        /** Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention */
+        put: operations["put_v1_services__id__image-policy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{id}/images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rudder Image versions pushed for a service and their Cloudflare R2 presence */
+        get: operations["get_v1_services__id__images"];
+        put?: never;
+        /** Push a locally built Docker image archive to Cloudflare R2, prune old R2 objects, and optionally deploy */
+        post: operations["post_v1_services__id__images"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{id}/images/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy the latest or specified Rudder Image stored in Cloudflare R2 */
+        post: operations["post_v1_services__id__images_deploy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{id}/images/{image_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a Rudder Image from Cloudflare R2 and/or version history */
+        delete: operations["delete_v1_services__id__images__image_id_"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{id}/images/{image_id}/deploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Deploy a specific Rudder Image version from Cloudflare R2 */
+        post: operations["post_v1_services__id__images__image_id__deploy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services/{id}/logs": {
         parameters: {
             query?: never;
@@ -3629,6 +3802,65 @@ export interface components {
             /** @description Non-secret description such as the chat id or webhook host. */
             summary: string;
         };
+        CliAuthApproveRequest: {
+            device_code?: string | null;
+            name?: string | null;
+            /** Format: uuid */
+            request_id?: string | null;
+        };
+        CliAuthApproveResponse: {
+            callback_url?: string | null;
+            client_name: string;
+            method: string;
+            /** Format: uuid */
+            request_id: string;
+            token?: string | null;
+            /** Format: uuid */
+            token_id: string;
+        };
+        CliAuthPollRequest: {
+            poll_secret: string;
+            /** Format: uuid */
+            request_id: string;
+        };
+        CliAuthPollResponse: {
+            status: string;
+            token?: string | null;
+            /** Format: uuid */
+            token_id?: string | null;
+        };
+        CliAuthRequestView: {
+            callback_url?: string | null;
+            client_name: string;
+            /** Format: date-time */
+            created_at: string;
+            device_code?: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            id: string;
+            method: string;
+            scopes: string[];
+            status: string;
+        };
+        CliAuthStartRequest: {
+            callback_url?: string | null;
+            client_name?: string | null;
+            method: string;
+            scopes?: string[] | null;
+        };
+        CliAuthStartResponse: {
+            device_code?: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: int32 */
+            interval_seconds: number;
+            method: string;
+            poll_secret: string;
+            /** Format: uuid */
+            request_id: string;
+            verification_path: string;
+        };
         CloudflareStatus: {
             access_configured: boolean;
             access_emails: string[];
@@ -3814,6 +4046,7 @@ export interface components {
             join_token?: string | null;
         };
         CreatedToken: {
+            auth_method: string;
             /** Format: date-time */
             expires_at?: string | null;
             /** Format: uuid */
@@ -3839,6 +4072,11 @@ export interface components {
             /** Format: uuid */
             registry_id?: string | null;
             watch_tag?: boolean | null;
+        };
+        DeployRudderImageRequest: {
+            /** Format: uuid */
+            image_id?: string | null;
+            tag?: string | null;
         };
         DeployTemplate: {
             name: string;
@@ -4163,6 +4401,19 @@ export interface components {
             /** Format: int64 */
             swap_total_bytes: number;
         };
+        ImageStoreSettingsView: {
+            bucket?: string | null;
+            /** Format: uuid */
+            destination_id?: string | null;
+            destination_name?: string | null;
+            path_prefix: string;
+            /** Format: int32 */
+            r2_keep_count?: number | null;
+            /** Format: int32 */
+            r2_keep_days?: number | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         ImportEnv: {
             /** @description Only report what would change; save nothing. */
             dry_run?: boolean;
@@ -4456,6 +4707,25 @@ export interface components {
             /** @description Replace an existing A, AAAA, or CNAME record with the tunnel's. Off by default. */
             overwrite_dns?: boolean;
         };
+        PushImageRequest: {
+            archive_base64?: string | null;
+            compression?: string | null;
+            deploy?: boolean | null;
+            expected_sha256?: string | null;
+            git_sha?: string | null;
+            image_ref?: string | null;
+            /** Format: int32 */
+            r2_keep_count?: number | null;
+            tag: string;
+        };
+        PushedImageResponse: {
+            auto_deploy: boolean;
+            deploy_error?: string | null;
+            deployed: boolean;
+            deployment?: components["schemas"]["DeploymentView"] | null;
+            image: components["schemas"]["RudderImageView"];
+            pruned_tags: string[];
+        };
         PutEnvVar: {
             is_build_secret: boolean;
             key: string;
@@ -4533,6 +4803,27 @@ export interface components {
         RollbackBody: {
             /** Format: uuid */
             deployment_id: string;
+        };
+        RudderImageView: {
+            compression: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            destination_id?: string | null;
+            git_sha?: string | null;
+            /** Format: uuid */
+            id: string;
+            image_ref: string;
+            object_key: string;
+            /** Format: uuid */
+            pushed_by?: string | null;
+            r2_present: boolean;
+            /** Format: uuid */
+            service_id: string;
+            sha256: string;
+            /** Format: int64 */
+            size_bytes: number;
+            tag: string;
         };
         RuleAction: {
             /**
@@ -4855,6 +5146,15 @@ export interface components {
             /** @description Why stats are missing, such as an unreachable cache server. */
             stats_error?: string | null;
         };
+        ServiceImagePolicyView: {
+            image_auto_deploy: boolean;
+            /** Format: int32 */
+            image_r2_keep_count?: number | null;
+            /** Format: int32 */
+            image_r2_keep_days?: number | null;
+            /** Format: uuid */
+            service_id: string;
+        };
         ServiceSummary: {
             /** Format: uuid */
             environment_id: string;
@@ -5124,6 +5424,7 @@ export interface components {
             ok: boolean;
         };
         TokenView: {
+            auth_method: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -5257,6 +5558,15 @@ export interface components {
             status: string;
             to_version: string;
         };
+        UpdateImageStoreSettings: {
+            /** Format: uuid */
+            destination_id?: string | null;
+            path_prefix?: string | null;
+            /** Format: int32 */
+            r2_keep_count?: number | null;
+            /** Format: int32 */
+            r2_keep_days?: number | null;
+        };
         UpdateNetwork: {
             isolation: boolean;
         };
@@ -5304,6 +5614,13 @@ export interface components {
             /** Format: uuid */
             server_id?: string | null;
             spec?: unknown;
+        };
+        UpdateServiceImagePolicy: {
+            image_auto_deploy: boolean;
+            /** Format: int32 */
+            image_r2_keep_count?: number | null;
+            /** Format: int32 */
+            image_r2_keep_days?: number | null;
         };
         UpdateSettings: {
             auto_update: boolean;
@@ -6778,6 +7095,98 @@ export interface operations {
             };
         };
     };
+    post_v1_cli_auth_approve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CliAuthApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description Approve a rudder CLI browser callback or 8-character device code login */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliAuthApproveResponse"];
+                };
+            };
+        };
+    };
+    post_v1_cli_auth_poll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CliAuthPollRequest"];
+            };
+        };
+        responses: {
+            /** @description Poll a rudder CLI login request for the issued API token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliAuthPollResponse"];
+                };
+            };
+        };
+    };
+    get_v1_cli_auth_requests__id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Inspect a pending rudder CLI login request before approving it */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliAuthRequestView"];
+                };
+            };
+        };
+    };
+    post_v1_cli_auth_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CliAuthStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Start a browser or 8-character device-code login flow for rudder CLI */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CliAuthStartResponse"];
+                };
+            };
+        };
+    };
     get_v1_cloudflare: {
         parameters: {
             query?: never;
@@ -7554,6 +7963,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GithubAppManifest"];
+                };
+            };
+        };
+    };
+    "get_v1_image-store_settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rudder Image store settings (Cloudflare R2 / S3 destination and default retention) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageStoreSettingsView"];
+                };
+            };
+        };
+    };
+    "put_v1_image-store_settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdateImageStoreSettings"];
+            };
+        };
+        responses: {
+            /** @description Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageStoreSettingsView"];
                 };
             };
         };
@@ -9376,6 +9829,156 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["VerifyEnvResult"];
+                };
+            };
+        };
+    };
+    "get_v1_services__id__image-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Get a service's Rudder Image auto-deploy and R2 retention policy */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceImagePolicyView"];
+                };
+            };
+        };
+    };
+    "put_v1_services__id__image-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["UpdateServiceImagePolicy"];
+            };
+        };
+        responses: {
+            /** @description Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceImagePolicyView"];
+                };
+            };
+        };
+    };
+    get_v1_services__id__images: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List Rudder Image versions pushed for a service and their Cloudflare R2 presence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RudderImageView"][];
+                };
+            };
+        };
+    };
+    post_v1_services__id__images: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PushImageRequest"];
+            };
+        };
+        responses: {
+            /** @description Push a locally built Docker image archive to Cloudflare R2, prune old R2 objects, and optionally deploy */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushedImageResponse"];
+                };
+            };
+        };
+    };
+    post_v1_services__id__images_deploy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DeployRudderImageRequest"];
+            };
+        };
+        responses: {
+            /** @description Deploy the latest or specified Rudder Image stored in Cloudflare R2 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentView"];
+                };
+            };
+        };
+    };
+    delete_v1_services__id__images__image_id_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Delete a Rudder Image from Cloudflare R2 and/or version history */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    post_v1_services__id__images__image_id__deploy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deploy a specific Rudder Image version from Cloudflare R2 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentView"];
                 };
             };
         };

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api } from "../api";
-import { Button, Card, Empty, Field, PickField, QuickPick, TextInput } from "../components/ui";
+import { Button, Card, Empty, Field, PickField, QuickPick, Select, TextInput } from "../components/ui";
 import { errorMessage, formatTime } from "../format";
 import { useT } from "../i18n";
 import { S3_PROVIDERS, S3_REGIONS } from "../presets";
@@ -10,6 +10,7 @@ import type { Schemas } from "../types";
 import { useConfirmSecret } from "../insecure";
 
 type Destination = Schemas["DestinationView"];
+type ImageStoreSettings = Schemas["ImageStoreSettingsView"];
 
 const blank = {
   name: "",
@@ -31,8 +32,42 @@ export function S3DestinationsPage() {
     queryKey: ["s3-destinations"],
     queryFn: () => api<Destination[]>("/api/v1/s3-destinations"),
   });
+  const imageStore = useQuery({
+    queryKey: ["image-store-settings"],
+    queryFn: () => api<ImageStoreSettings>("/api/v1/image-store/settings"),
+  });
+
   const [form, setForm] = useState(blank);
   const [editing, setEditing] = useState<string | null>(null);
+  const [storeDestinationId, setStoreDestinationId] = useState("");
+  const [storePrefix, setStorePrefix] = useState("rudder-images");
+  const [storeKeepCount, setStoreKeepCount] = useState("");
+
+  useEffect(() => {
+    if (!imageStore.data) return;
+    setStoreDestinationId(imageStore.data.destination_id ?? "");
+    setStorePrefix(imageStore.data.path_prefix || "rudder-images");
+    setStoreKeepCount(
+      imageStore.data.r2_keep_count != null ? String(imageStore.data.r2_keep_count) : "",
+    );
+  }, [imageStore.data]);
+
+  const saveImageStore = useMutation({
+    mutationFn: () =>
+      api<ImageStoreSettings>("/api/v1/image-store/settings", {
+        method: "PUT",
+        body: JSON.stringify({
+          destination_id: storeDestinationId || null,
+          path_prefix: storePrefix || "rudder-images",
+          r2_keep_count: storeKeepCount.trim() ? Number(storeKeepCount) : null,
+        }),
+      }),
+    onSuccess: async () => {
+      toast.success(t("Rudder Image store settings saved"));
+      await queryClient.invalidateQueries({ queryKey: ["image-store-settings"] });
+    },
+    onError: (error) => toast.error(errorMessage(error, t("Could not save image store settings"))),
+  });
 
   const save = useMutation({
     mutationFn: () => {
@@ -113,6 +148,58 @@ export function S3DestinationsPage() {
           "Any S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2, Wasabi, RustFS, Garage, or MinIO. Keys are encrypted at rest and never shown again.",
         )}
       </p>
+      <Card
+        title={t("Rudder Image store (Cloudflare R2)")}
+        description={t(
+          "Choose which Cloudflare R2 or S3 bucket stores Docker images uploaded with `rudder push`. Older versions above the retention limit are pruned from R2 to save storage cost while remaining on the developer's machine.",
+        )}
+      >
+        <form
+          className="grid gap-3 md:grid-cols-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            saveImageStore.mutate();
+          }}
+        >
+          <Field label={t("Image store bucket")}>
+            <Select
+              value={storeDestinationId}
+              onChange={(event) => setStoreDestinationId(event.target.value)}
+            >
+              <option value="">{t("Disabled")}</option>
+              {(destinations.data ?? []).map((dest) => (
+                <option key={dest.id} value={dest.id}>
+                  {dest.name} ({dest.bucket})
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t("Object key prefix")}>
+            <TextInput
+              required
+              value={storePrefix}
+              onChange={(event) => setStorePrefix(event.target.value)}
+            />
+          </Field>
+          <Field
+            label={t("Keep on R2 (versions per service)")}
+            hint={t("Leave empty to keep all versions on R2.")}
+          >
+            <TextInput
+              type="number"
+              min={1}
+              placeholder="10"
+              value={storeKeepCount}
+              onChange={(event) => setStoreKeepCount(event.target.value)}
+            />
+          </Field>
+          <div className="md:col-span-3">
+            <Button type="submit" disabled={saveImageStore.isPending}>
+              {t("Save image store")}
+            </Button>
+          </div>
+        </form>
+      </Card>
       <Card title={editing ? t("Edit destination") : t("New destination")}>
         <form
           className="grid gap-3 md:grid-cols-2"

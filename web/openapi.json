@@ -1517,6 +1517,117 @@
         }
       }
     },
+    "/api/v1/cli/auth/approve": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Approve a rudder CLI browser callback or 8-character device code login",
+        "operationId": "post_v1_cli_auth_approve",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliAuthApproveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Approve a rudder CLI browser callback or 8-character device code login",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliAuthApproveResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/auth/poll": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Poll a rudder CLI login request for the issued API token",
+        "operationId": "post_v1_cli_auth_poll",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliAuthPollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Poll a rudder CLI login request for the issued API token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliAuthPollResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/auth/requests/{id}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Inspect a pending rudder CLI login request before approving it",
+        "operationId": "get_v1_cli_auth_requests__id_",
+        "responses": {
+          "200": {
+            "description": "Inspect a pending rudder CLI login request before approving it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliAuthRequestView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cli/auth/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start a browser or 8-character device-code login flow for rudder CLI",
+        "operationId": "post_v1_cli_auth_start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliAuthStartRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Start a browser or 8-character device-code login flow for rudder CLI",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliAuthStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cloudflare": {
       "get": {
         "tags": [
@@ -2391,6 +2502,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GithubAppManifest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/image-store/settings": {
+      "get": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Rudder Image store settings (Cloudflare R2 / S3 destination and default retention)",
+        "operationId": "get_v1_image-store_settings",
+        "responses": {
+          "200": {
+            "description": "Rudder Image store settings (Cloudflare R2 / S3 destination and default retention)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageStoreSettingsView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images",
+        "operationId": "put_v1_image-store_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateImageStoreSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageStoreSettingsView"
                 }
               }
             }
@@ -4371,6 +4531,172 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyEnvResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/{id}/image-policy": {
+      "get": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Get a service's Rudder Image auto-deploy and R2 retention policy",
+        "operationId": "get_v1_services__id__image-policy",
+        "responses": {
+          "200": {
+            "description": "Get a service's Rudder Image auto-deploy and R2 retention policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceImagePolicyView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention",
+        "operationId": "put_v1_services__id__image-policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServiceImagePolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Set whether pushed Rudder Images deploy immediately or notify only, plus R2 retention",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceImagePolicyView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/{id}/images": {
+      "get": {
+        "tags": [
+          "source"
+        ],
+        "summary": "List Rudder Image versions pushed for a service and their Cloudflare R2 presence",
+        "operationId": "get_v1_services__id__images",
+        "responses": {
+          "200": {
+            "description": "List Rudder Image versions pushed for a service and their Cloudflare R2 presence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RudderImageView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Push a locally built Docker image archive to Cloudflare R2, prune old R2 objects, and optionally deploy",
+        "operationId": "post_v1_services__id__images",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Push a locally built Docker image archive to Cloudflare R2, prune old R2 objects, and optionally deploy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushedImageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/{id}/images/deploy": {
+      "post": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Deploy the latest or specified Rudder Image stored in Cloudflare R2",
+        "operationId": "post_v1_services__id__images_deploy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeployRudderImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Deploy the latest or specified Rudder Image stored in Cloudflare R2",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/{id}/images/{image_id}": {
+      "delete": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Delete a Rudder Image from Cloudflare R2 and/or version history",
+        "operationId": "delete_v1_services__id__images__image_id_",
+        "responses": {
+          "204": {
+            "description": "Delete a Rudder Image from Cloudflare R2 and/or version history"
+          }
+        }
+      }
+    },
+    "/api/v1/services/{id}/images/{image_id}/deploy": {
+      "post": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Deploy a specific Rudder Image version from Cloudflare R2",
+        "operationId": "post_v1_services__id__images__image_id__deploy",
+        "responses": {
+          "202": {
+            "description": "Deploy a specific Rudder Image version from Cloudflare R2",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentView"
                 }
               }
             }
@@ -6828,6 +7154,233 @@
           }
         }
       },
+      "CliAuthApproveRequest": {
+        "type": "object",
+        "properties": {
+          "device_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "CliAuthApproveResponse": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "token_id",
+          "method",
+          "client_name"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "token_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CliAuthPollRequest": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "poll_secret"
+        ],
+        "properties": {
+          "poll_secret": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CliAuthPollResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "token_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "CliAuthRequestView": {
+        "type": "object",
+        "required": [
+          "id",
+          "method",
+          "client_name",
+          "scopes",
+          "status",
+          "expires_at",
+          "created_at"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "method": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "CliAuthStartRequest": {
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "properties": {
+          "callback_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "client_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "method": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CliAuthStartResponse": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "method",
+          "poll_secret",
+          "verification_path",
+          "expires_at",
+          "interval_seconds"
+        ],
+        "properties": {
+          "device_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "method": {
+            "type": "string"
+          },
+          "poll_secret": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "verification_path": {
+            "type": "string"
+          }
+        }
+      },
       "CloudflareStatus": {
         "type": "object",
         "required": [
@@ -7529,9 +8082,13 @@
           "id",
           "name",
           "scopes",
+          "auth_method",
           "token"
         ],
         "properties": {
+          "auth_method": {
+            "type": "string"
+          },
           "expires_at": {
             "type": [
               "string",
@@ -7628,6 +8185,24 @@
           "watch_tag": {
             "type": [
               "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "DeployRudderImageRequest": {
+        "type": "object",
+        "properties": {
+          "image_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "tag": {
+            "type": [
+              "string",
               "null"
             ]
           }
@@ -8525,6 +9100,55 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          }
+        }
+      },
+      "ImageStoreSettingsView": {
+        "type": "object",
+        "required": [
+          "path_prefix",
+          "updated_at"
+        ],
+        "properties": {
+          "bucket": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "destination_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "destination_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "r2_keep_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "r2_keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -9528,6 +10152,102 @@
           }
         }
       },
+      "PushImageRequest": {
+        "type": "object",
+        "required": [
+          "tag"
+        ],
+        "properties": {
+          "archive_base64": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "compression": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deploy": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "expected_sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "git_sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "image_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "r2_keep_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "tag": {
+            "type": "string"
+          }
+        }
+      },
+      "PushedImageResponse": {
+        "type": "object",
+        "required": [
+          "image",
+          "auto_deploy",
+          "deployed",
+          "pruned_tags"
+        ],
+        "properties": {
+          "auto_deploy": {
+            "type": "boolean"
+          },
+          "deploy_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deployed": {
+            "type": "boolean"
+          },
+          "deployment": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeploymentView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image": {
+            "$ref": "#/components/schemas/RudderImageView"
+          },
+          "pruned_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "PutEnvVar": {
         "type": "object",
         "required": [
@@ -9801,6 +10521,77 @@
           "deployment_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "RudderImageView": {
+        "type": "object",
+        "required": [
+          "id",
+          "service_id",
+          "tag",
+          "image_ref",
+          "object_key",
+          "compression",
+          "size_bytes",
+          "sha256",
+          "r2_present",
+          "created_at"
+        ],
+        "properties": {
+          "compression": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "destination_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "git_sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "image_ref": {
+            "type": "string"
+          },
+          "object_key": {
+            "type": "string"
+          },
+          "pushed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "r2_present": {
+            "type": "boolean"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tag": {
+            "type": "string"
           }
         }
       },
@@ -10821,6 +11612,36 @@
           }
         }
       },
+      "ServiceImagePolicyView": {
+        "type": "object",
+        "required": [
+          "service_id",
+          "image_auto_deploy"
+        ],
+        "properties": {
+          "image_auto_deploy": {
+            "type": "boolean"
+          },
+          "image_r2_keep_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "image_r2_keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "ServiceSummary": {
         "type": "object",
         "required": [
@@ -11759,9 +12580,13 @@
           "id",
           "name",
           "scopes",
+          "auth_method",
           "created_at"
         ],
         "properties": {
+          "auth_method": {
+            "type": "string"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
@@ -12230,6 +13055,38 @@
           }
         }
       },
+      "UpdateImageStoreSettings": {
+        "type": "object",
+        "properties": {
+          "destination_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "path_prefix": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "r2_keep_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "r2_keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
+      },
       "UpdateNetwork": {
         "type": "object",
         "required": [
@@ -12420,6 +13277,31 @@
             "format": "uuid"
           },
           "spec": {}
+        }
+      },
+      "UpdateServiceImagePolicy": {
+        "type": "object",
+        "required": [
+          "image_auto_deploy"
+        ],
+        "properties": {
+          "image_auto_deploy": {
+            "type": "boolean"
+          },
+          "image_r2_keep_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "image_r2_keep_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
         }
       },
       "UpdateSettings": {

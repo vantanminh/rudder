@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { errorMessage, formatDuration, formatRelative, formatTime } from "../format";
@@ -1507,5 +1507,164 @@ function CheckValueDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+
+type ServiceImagePolicy = Schemas["ServiceImagePolicyView"];
+type RudderImage = Schemas["RudderImageView"];
+
+export function RudderImagesCard({ service }: { service: ServiceDetail }) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const policy = useQuery({
+    queryKey: ["service-image-policy", service.id],
+    queryFn: () => api<ServiceImagePolicy>(`/api/v1/services/${service.id}/image-policy`),
+  });
+  const images = useQuery({
+    queryKey: ["service-images", service.id],
+    queryFn: () => api<RudderImage[]>(`/api/v1/services/${service.id}/images`),
+  });
+
+  const [autoDeploy, setAutoDeploy] = useState(true);
+  const [keepCount, setKeepCount] = useState("");
+
+  useEffect(() => {
+    if (!policy.data) return;
+    setAutoDeploy(policy.data.image_auto_deploy);
+    setKeepCount(
+      policy.data.image_r2_keep_count != null ? String(policy.data.image_r2_keep_count) : "",
+    );
+  }, [policy.data]);
+
+  const savePolicy = useMutation({
+    mutationFn: () =>
+      api<ServiceImagePolicy>(`/api/v1/services/${service.id}/image-policy`, {
+        method: "PUT",
+        body: JSON.stringify({
+          image_auto_deploy: autoDeploy,
+          image_r2_keep_count: keepCount.trim() ? Number(keepCount) : null,
+        }),
+      }),
+    onSuccess: async () => {
+      toast.success(t("Rudder Image policy saved"));
+      await queryClient.invalidateQueries({ queryKey: ["service-image-policy", service.id] });
+    },
+    onError: (error) => toast.error(errorMessage(error, t("Could not save image policy"))),
+  });
+
+  const deployR2 = useMutation({
+    mutationFn: (imageId: string) =>
+      api(`/api/v1/services/${service.id}/images/${imageId}/deploy`, { method: "POST" }),
+    onSuccess: async () => {
+      toast.success(t("Deployment finished"));
+      await queryClient.invalidateQueries({ queryKey: ["deployments", service.id] });
+      await queryClient.invalidateQueries({ queryKey: ["service", service.id] });
+    },
+    onError: (error) => toast.error(errorMessage(error, t("Deploy failed"))),
+  });
+
+  const removeImage = useMutation({
+    mutationFn: (imageId: string) =>
+      api(`/api/v1/services/${service.id}/images/${imageId}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success(t("Image removed"));
+      await queryClient.invalidateQueries({ queryKey: ["service-images", service.id] });
+    },
+    onError: (error) => toast.error(errorMessage(error, t("Could not remove image"))),
+  });
+
+  return (
+    <Card
+      title={t("Rudder Image (local CI/CD & Cloudflare R2)")}
+      description={t(
+        "Build images on a developer machine with `rudder build`, push them to Cloudflare R2 with `rudder push`, and deploy with `rudder deploy`.",
+      )}
+    >
+      <form
+        className="grid gap-4 md:grid-cols-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          savePolicy.mutate();
+        }}
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={autoDeploy}
+            onChange={(event) => setAutoDeploy(event.target.checked)}
+          />
+          {t("Auto-deploy immediately when a new image is pushed")}
+        </label>
+        <Field
+          label={t("Keep on Cloudflare R2 (versions)")}
+          hint={t("Leave empty to use the global R2 retention setting.")}
+        >
+          <TextInput
+            type="number"
+            min={1}
+            placeholder="10"
+            value={keepCount}
+            onChange={(event) => setKeepCount(event.target.value)}
+          />
+        </Field>
+        <div className="md:col-span-2">
+          <Button type="submit" disabled={savePolicy.isPending}>
+            {t("Save image policy")}
+          </Button>
+        </div>
+      </form>
+      <div className="mt-6">
+        {(images.data ?? []).length === 0 ? (
+          <Empty>{t("No images pushed via `rudder push` yet.")}</Empty>
+        ) : (
+          <DataTable
+            head={
+              <>
+                <Th>{t("Tag")}</Th>
+                <Th>{t("SHA-256")}</Th>
+                <Th>{t("R2 storage")}</Th>
+                <Th>{t("Pushed")}</Th>
+                <Th />
+              </>
+            }
+          >
+            {(images.data ?? []).map((img) => (
+              <tr key={img.id}>
+                <Td className="font-mono">{img.tag}</Td>
+                <Td className="font-mono">{img.sha256.slice(0, 12)}</Td>
+                <Td>
+                  <Badge
+                    value={img.r2_present ? t("In R2") : t("Pruned from R2")}
+                    tone={img.r2_present ? "success" : "neutral"}
+                  />
+                </Td>
+                <Td>{formatRelative(img.created_at)}</Td>
+                <Td className="text-right">
+                  <div className="flex justify-end gap-2">
+                    {img.r2_present ? (
+                      <Button
+                        quiet
+                        onClick={() => deployR2.mutate(img.id)}
+                        disabled={deployR2.isPending}
+                      >
+                        {t("Deploy")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      quiet
+                      onClick={() => removeImage.mutate(img.id)}
+                      disabled={removeImage.isPending}
+                    >
+                      {t("Remove")}
+                    </Button>
+                  </div>
+                </Td>
+              </tr>
+            ))}
+          </DataTable>
+        )}
+      </div>
+    </Card>
   );
 }

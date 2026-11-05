@@ -15,6 +15,7 @@ import {
   ServiceAccess,
   EnvironmentPanel,
   GitSourceCard,
+  RudderImagesCard,
   type ServiceDetail,
 } from "../components/service-panels";
 import { StackLogs, StackOverview, StackSourceEditor, useStack } from "../components/stacks";
@@ -413,7 +414,10 @@ function Panel({
       ) : service.kind === "compose" ? (
         <StackOverview serviceId={id} />
       ) : (
-        <DeployImageCard service={service} />
+        <>
+          <DeployImageCard service={service} />
+          <RudderImagesCard service={service} />
+        </>
       );
     case "source":
       return isStack ? <StackSourceEditor serviceId={id} /> : <GitSourceCard service={service} />;
