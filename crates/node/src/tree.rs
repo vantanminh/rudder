@@ -357,6 +357,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn symlink_outside_the_checkout_is_not_packed() {
         let dir = scratch("rudder-tree-link");
         let src = dir.0.join("src");

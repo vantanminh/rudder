@@ -6,6 +6,7 @@
 //! [`restore`] runs before the panel starts, from `rudder-server restore`.
 
 use std::io::Write as _;
+#[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -238,6 +239,7 @@ impl WorkDir {
         std::fs::create_dir_all(parent)?;
         let path = parent.join(format!("{prefix}-{}", Uuid::new_v4()));
         std::fs::create_dir(&path)?;
+        #[cfg(unix)]
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
         Ok(Self { path })
     }
@@ -254,12 +256,11 @@ impl Drop for WorkDir {
 }
 
 fn write_private(path: &Path, data: &[u8]) -> std::io::Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)?;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    let mut file = opts.open(path)?;
     file.write_all(data)?;
     file.sync_all()
 }
@@ -304,6 +305,7 @@ pub async fn archive(
         );
     }
     run_pg_tool(&config.pg_dump, &args, &env).await?;
+    #[cfg(unix)]
     std::fs::set_permissions(work.file(DUMP), std::fs::Permissions::from_mode(0o600))
         .map_err(io_error("protect the dump"))?;
     let manifest = Manifest {
@@ -455,10 +457,11 @@ async fn extract(stream: ByteStream, work: &WorkDir) -> anyhow::Result<()> {
             if !ENTRIES.contains(&name) || !entry.header().entry_type().is_file() {
                 bail!("unexpected entry '{path}' in the backup");
             }
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
+            let mut opts = std::fs::OpenOptions::new();
+            opts.write(true).create_new(true);
+            #[cfg(unix)]
+            opts.mode(0o600);
+            let mut file = opts
                 .open(dir.join(name))
                 .with_context(|| format!("unpack {name}"))?;
             std::io::copy(&mut entry, &mut file).with_context(|| format!("unpack {name}"))?;
@@ -929,6 +932,7 @@ mod tests {
             "#!/bin/sh\nprintf '%s\\n' \\\n  'SET transaction_timeout = 0;' \\\n  '\\restrict tok' \\\n  'CREATE TABLE probe (n int);' \\\n  'INSERT INTO probe VALUES (7);' \\\n  '\\unrestrict tok'\n",
         )
         .unwrap();
+        #[cfg(unix)]
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
         let env = pg_env(url.as_str()).unwrap();
         load_dump_with_psql(&script, &script, &env)

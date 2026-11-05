@@ -525,6 +525,240 @@ async fn audit_log_records_mutations(pool: PgPool) {
     assert!(!leaked.contains("rdr_"));
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn cli_auth_device_code_browser_and_revocation(pool: PgPool) {
+    let app = app(pool);
+    let created = call(
+        &app,
+        "POST",
+        "/api/v1/setup",
+        None,
+        None,
+        None,
+        Some(json!({
+            "email": "owner@example.com",
+            "password": "correct-horse-battery"
+        })),
+    )
+    .await;
+    let (cookie, csrf) = session_of(&created);
+
+    // 1. Device code flow (8-character alphanumeric code with letters + digits)
+    let start_dev = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/start",
+        None,
+        None,
+        None,
+        Some(json!({
+            "method": "device_code",
+            "client_name": "dev-macbook"
+        })),
+    )
+    .await;
+    assert_eq!(start_dev.status, StatusCode::CREATED);
+    let dev_req_id = start_dev.body["request_id"].as_str().unwrap().to_owned();
+    let dev_poll_secret = start_dev.body["poll_secret"].as_str().unwrap().to_owned();
+    let device_code = start_dev.body["device_code"].as_str().unwrap().to_owned();
+    assert_eq!(device_code.len(), 8);
+    assert!(device_code.chars().any(|c| c.is_ascii_alphabetic()));
+    assert!(device_code.chars().any(|c| c.is_ascii_digit()));
+
+    let pending = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/poll",
+        None,
+        None,
+        None,
+        Some(json!({
+            "request_id": dev_req_id,
+            "poll_secret": dev_poll_secret
+        })),
+    )
+    .await;
+    assert_eq!(pending.status, StatusCode::OK);
+    assert_eq!(pending.body["status"], "pending");
+
+    let approved_dev = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/approve",
+        Some(&cookie),
+        Some(&csrf),
+        None,
+        Some(json!({
+            "device_code": device_code.to_ascii_lowercase()
+        })),
+    )
+    .await;
+    assert_eq!(approved_dev.status, StatusCode::OK);
+    let dev_token_id = approved_dev.body["token_id"].as_str().unwrap().to_owned();
+
+    let polled_dev = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/poll",
+        None,
+        None,
+        None,
+        Some(json!({
+            "request_id": dev_req_id,
+            "poll_secret": dev_poll_secret
+        })),
+    )
+    .await;
+    assert_eq!(polled_dev.status, StatusCode::OK);
+    assert_eq!(polled_dev.body["status"], "approved");
+    let dev_token = polled_dev.body["token"].as_str().unwrap().to_owned();
+    assert!(dev_token.starts_with("rdr_"));
+
+    // Polling a second time must not return the raw token again
+    let polled_again = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/poll",
+        None,
+        None,
+        None,
+        Some(json!({
+            "request_id": dev_req_id,
+            "poll_secret": dev_poll_secret
+        })),
+    )
+    .await;
+    assert_eq!(polled_again.status, StatusCode::OK);
+    assert_eq!(polled_again.body["status"], "consumed");
+    assert!(polled_again.body["token"].is_null());
+
+    // 2. Browser callback flow
+    let start_browser = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/start",
+        None,
+        None,
+        None,
+        Some(json!({
+            "method": "browser",
+            "client_name": "dev-windows",
+            "callback_url": "http://127.0.0.1:45678/callback"
+        })),
+    )
+    .await;
+    assert_eq!(start_browser.status, StatusCode::CREATED);
+    let browser_req_id = start_browser.body["request_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let inspect = call(
+        &app,
+        "GET",
+        &format!("/api/v1/cli/auth/requests/{browser_req_id}"),
+        Some(&cookie),
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(inspect.status, StatusCode::OK);
+    assert_eq!(inspect.body["client_name"], "dev-windows");
+    assert_eq!(inspect.body["method"], "browser");
+
+    let approved_browser = call(
+        &app,
+        "POST",
+        "/api/v1/cli/auth/approve",
+        Some(&cookie),
+        Some(&csrf),
+        None,
+        Some(json!({
+            "request_id": browser_req_id
+        })),
+    )
+    .await;
+    assert_eq!(approved_browser.status, StatusCode::OK);
+    let browser_token = approved_browser.body["token"].as_str().unwrap().to_owned();
+    let browser_token_id = approved_browser.body["token_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        approved_browser.body["callback_url"],
+        "http://127.0.0.1:45678/callback"
+    );
+
+    // Both tokens work for authenticated API requests
+    let me_dev = call(
+        &app,
+        "GET",
+        "/api/v1/me",
+        None,
+        None,
+        Some(&dev_token),
+        None,
+    )
+    .await;
+    assert_eq!(me_dev.status, StatusCode::OK);
+    let me_browser = call(
+        &app,
+        "GET",
+        "/api/v1/me",
+        None,
+        None,
+        Some(&browser_token),
+        None,
+    )
+    .await;
+    assert_eq!(me_browser.status, StatusCode::OK);
+
+    // List tokens shows auth_method for each login
+    let tokens = call(
+        &app,
+        "GET",
+        "/api/v1/tokens",
+        Some(&cookie),
+        None,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(tokens.status, StatusCode::OK);
+    let token_arr = tokens.body.as_array().unwrap();
+    assert!(token_arr
+        .iter()
+        .any(|t| t["id"] == dev_token_id && t["auth_method"] == "device_code"));
+    assert!(token_arr
+        .iter()
+        .any(|t| t["id"] == browser_token_id && t["auth_method"] == "browser"));
+
+    // Revoke device-code token and verify it is immediately rejected
+    let revoke = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/tokens/{dev_token_id}"),
+        Some(&cookie),
+        Some(&csrf),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(revoke.status, StatusCode::NO_CONTENT);
+    let after_revoke = call(
+        &app,
+        "GET",
+        "/api/v1/me",
+        None,
+        None,
+        Some(&dev_token),
+        None,
+    )
+    .await;
+    assert_eq!(after_revoke.status, StatusCode::UNAUTHORIZED);
+}
+
 fn current_code(secret_b32: &str, email: &str) -> String {
     let secret = Secret::try_from_base32(secret_b32).unwrap();
     let totp = Builder::new()

@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Three ways to sign in from the `rudder` CLI, with revocation on the panel.** Sign in with an API key, authorize in your browser (`rudder login --browser`), or enter an 8-character device code (`rudder login --device`) on **Account → API tokens**. Each token shows how it signed in and can be revoked at any time.
+
 ## [0.6.1] - 2026-11-04
 
 ### Fixed

@@ -8,6 +8,7 @@
 //! the marker once a session is welcomed, or restores `.prev` if none is within
 //! the grace period.
 
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -73,11 +74,11 @@ pub async fn install(
     let staged = sibling(&update.binary, "new");
     let io =
         |what: &'static str| move |error: std::io::Error| Error::Node(format!("{what}: {error}"));
-    let mut file = tokio::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o755)
+    let mut opts = tokio::fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    opts.mode(0o755);
+    let mut file = opts
         .open(&staged)
         .await
         .map_err(io("stage the new agent"))?;
@@ -113,6 +114,7 @@ pub async fn install(
             "agent binary does not match its checksum".into(),
         )));
     }
+    #[cfg(unix)]
     std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
         .map_err(io("mark the new agent executable"))
         .map_err(cleanup)?;
@@ -219,6 +221,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let binary = dir.path().join("rudder-agent");
         std::fs::write(&binary, script("0.1.0")).unwrap();
+        #[cfg(unix)]
         std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
         let restarts = Arc::new(AtomicUsize::new(0));
         let counter = restarts.clone();

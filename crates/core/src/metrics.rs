@@ -159,6 +159,7 @@ pub fn read_host_stats(
         .ok()
         .and_then(|t| parse_loadavg(&t))
         .unwrap_or(0.0);
+    #[cfg(unix)]
     let (disk_total, disk_used) = match rustix::fs::statvfs(disk_path) {
         Ok(vfs) => {
             let total = vfs.f_blocks.saturating_mul(vfs.f_frsize);
@@ -166,6 +167,11 @@ pub fn read_host_stats(
             (total, total.saturating_sub(free))
         }
         Err(_) => (0, 0),
+    };
+    #[cfg(not(unix))]
+    let (disk_total, disk_used) = {
+        let _ = disk_path;
+        (0, 0)
     };
     Ok(HostStats {
         cpu_percent: cpu,
@@ -388,6 +394,9 @@ mod tests {
 
     #[test]
     fn host_stats_read_from_this_machine() {
+        if !Path::new("/proc/stat").exists() {
+            return;
+        }
         let mut previous = None;
         let first = read_host_stats(Path::new("/proc"), Path::new("/"), &mut previous).unwrap();
         assert!(first.memory_total_bytes > 0);

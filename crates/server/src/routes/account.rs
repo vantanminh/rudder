@@ -97,23 +97,87 @@ pub struct CreateToken {
     expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
 pub struct TokenView {
-    id: Uuid,
-    name: String,
-    scopes: Vec<String>,
-    expires_at: Option<DateTime<Utc>>,
-    last_used_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
+    pub id: Uuid,
+    pub name: String,
+    pub scopes: Vec<String>,
+    pub auth_method: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub last_used_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct CreatedToken {
-    id: Uuid,
-    name: String,
-    scopes: Vec<String>,
-    token: String,
-    expires_at: Option<DateTime<Utc>>,
+    pub id: Uuid,
+    pub name: String,
+    pub scopes: Vec<String>,
+    pub auth_method: String,
+    pub token: String,
+    pub expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CliAuthStartRequest {
+    pub method: String,
+    pub client_name: Option<String>,
+    pub callback_url: Option<String>,
+    pub scopes: Option<Vec<String>>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CliAuthStartResponse {
+    pub request_id: Uuid,
+    pub method: String,
+    pub poll_secret: String,
+    pub device_code: Option<String>,
+    pub verification_path: String,
+    pub expires_at: DateTime<Utc>,
+    pub interval_seconds: u32,
+}
+
+#[derive(Serialize, ToSchema, sqlx::FromRow)]
+pub struct CliAuthRequestView {
+    pub id: Uuid,
+    pub method: String,
+    pub client_name: String,
+    pub scopes: Vec<String>,
+    pub device_code: Option<String>,
+    pub callback_url: Option<String>,
+    pub status: String,
+    pub expires_at: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CliAuthApproveRequest {
+    pub request_id: Option<Uuid>,
+    pub device_code: Option<String>,
+    pub name: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CliAuthApproveResponse {
+    pub request_id: Uuid,
+    pub token_id: Uuid,
+    pub method: String,
+    pub client_name: String,
+    pub callback_url: Option<String>,
+    pub token: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CliAuthPollRequest {
+    pub request_id: Uuid,
+    pub poll_secret: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CliAuthPollResponse {
+    pub status: String,
+    pub token: Option<String>,
+    pub token_id: Option<Uuid>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -152,6 +216,10 @@ pub fn router() -> axum::Router<AppState> {
         )
         .route("/api/v1/tokens", get(list_tokens).post(create_token))
         .route("/api/v1/tokens/{id}", axum::routing::delete(delete_token))
+        .route("/api/v1/cli/auth/start", post(cli_auth_start))
+        .route("/api/v1/cli/auth/requests/{id}", get(cli_auth_get))
+        .route("/api/v1/cli/auth/approve", post(cli_auth_approve))
+        .route("/api/v1/cli/auth/poll", post(cli_auth_poll))
         .route("/api/v1/audit", get(list_audit))
 }
 
@@ -764,30 +832,19 @@ async fn list_tokens(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> Result<Json<Vec<TokenView>>, ApiError> {
-    let rows = sqlx::query!(
+    let rows = sqlx::query_as::<_, TokenView>(
         r#"
-        SELECT id, name, scopes, expires_at, last_used_at, created_at
+        SELECT id, name, scopes, auth_method, expires_at, last_used_at, created_at
         FROM api_tokens
         WHERE user_id = $1
         ORDER BY created_at DESC
         "#,
-        auth.id,
     )
+    .bind(auth.id)
     .fetch_all(&state.pool)
     .await
     .map_err(ApiError::database)?;
-    Ok(Json(
-        rows.into_iter()
-            .map(|row| TokenView {
-                id: row.id,
-                name: row.name,
-                scopes: row.scopes,
-                expires_at: row.expires_at,
-                last_used_at: row.last_used_at,
-                created_at: row.created_at,
-            })
-            .collect(),
-    ))
+    Ok(Json(rows))
 }
 
 async fn create_token(
@@ -840,6 +897,7 @@ async fn create_token(
             id: row.id,
             name: name.to_owned(),
             scopes,
+            auth_method: "api_key".into(),
             token,
             expires_at: body.expires_at,
         }),
@@ -877,6 +935,385 @@ async fn delete_token(
     )
     .await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn cli_auth_start(
+    State(state): State<AppState>,
+    Json(body): Json<CliAuthStartRequest>,
+) -> Result<(StatusCode, Json<CliAuthStartResponse>), ApiError> {
+    let method = body.method.trim();
+    if method != "browser" && method != "device_code" {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_method",
+            "method must be 'browser' or 'device_code'",
+        ));
+    }
+    let client_name = body
+        .client_name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("rudder-cli");
+    if client_name.len() > 64 || client_name.chars().any(|ch| ch.is_control()) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_name",
+            "client_name must be 1 to 64 visible characters",
+        ));
+    }
+    let requested_scopes = body
+        .scopes
+        .unwrap_or_else(|| vec!["read".into(), "write".into()]);
+    let scopes = auth::validate_scopes(&requested_scopes)?;
+    let callback_url = if method == "browser" {
+        let Some(url) = body.callback_url.as_deref() else {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "missing_callback_url",
+                "callback_url is required for browser login",
+            ));
+        };
+        let clean = rudder_core::validate_cli_callback_url(url).map_err(|err| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_callback_url",
+                err.to_string(),
+            )
+        })?;
+        Some(clean)
+    } else {
+        None
+    };
+
+    let _ = sqlx::query("DELETE FROM cli_auth_requests WHERE expires_at < now()")
+        .execute(&state.pool)
+        .await;
+
+    let device_code = if method == "device_code" {
+        Some(rudder_core::generate_device_code())
+    } else {
+        None
+    };
+    let poll_secret = auth::random_token("rdr_poll");
+    let poll_secret_hash = auth::sha256_hex(&poll_secret);
+    let expires_at = Utc::now() + chrono::Duration::minutes(10);
+
+    let request_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO cli_auth_requests (
+            kind, client_name, scopes, device_code, secret_hash, callback_url, status, expires_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+        RETURNING id
+        "#,
+    )
+    .bind(method)
+    .bind(client_name)
+    .bind(&scopes)
+    .bind(&device_code)
+    .bind(&poll_secret_hash)
+    .bind(&callback_url)
+    .bind(expires_at)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+
+    let verification_path = if method == "browser" {
+        format!("/tokens?cli_request={request_id}")
+    } else {
+        "/tokens?device=1".to_owned()
+    };
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CliAuthStartResponse {
+            request_id,
+            method: method.to_owned(),
+            poll_secret,
+            device_code,
+            verification_path,
+            expires_at,
+            interval_seconds: 2,
+        }),
+    ))
+}
+
+async fn cli_auth_get(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<CliAuthRequestView>, ApiError> {
+    let row = sqlx::query_as::<_, CliAuthRequestView>(
+        r#"
+        SELECT id, kind AS method, client_name, scopes, device_code, callback_url, status, expires_at, created_at
+        FROM cli_auth_requests
+        WHERE id = $1
+        "#,
+    )
+    .bind(id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+    let Some(mut row) = row else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "CLI auth request not found",
+        ));
+    };
+    if row.status == "pending" && row.expires_at < Utc::now() {
+        row.status = "expired".into();
+    }
+    Ok(Json(row))
+}
+
+#[derive(sqlx::FromRow)]
+struct PendingCliAuthRow {
+    id: Uuid,
+    method: String,
+    client_name: String,
+    scopes: Vec<String>,
+    callback_url: Option<String>,
+    status: String,
+    expires_at: DateTime<Utc>,
+}
+
+async fn cli_auth_approve(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Json(body): Json<CliAuthApproveRequest>,
+) -> Result<Json<CliAuthApproveResponse>, ApiError> {
+    let row: Option<PendingCliAuthRow> = if let Some(request_id) = body.request_id {
+        sqlx::query_as::<_, PendingCliAuthRow>(
+            r#"
+            SELECT id, kind AS method, client_name, scopes, callback_url, status, expires_at
+            FROM cli_auth_requests
+            WHERE id = $1
+            "#,
+        )
+        .bind(request_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(ApiError::database)?
+    } else if let Some(raw_code) = body.device_code.as_deref() {
+        let code = rudder_core::normalize_device_code(raw_code).map_err(|err| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_device_code",
+                err.to_string(),
+            )
+        })?;
+        sqlx::query_as::<_, PendingCliAuthRow>(
+            r#"
+            SELECT id, kind AS method, client_name, scopes, callback_url, status, expires_at
+            FROM cli_auth_requests
+            WHERE device_code = $1 AND kind = 'device_code'
+            "#,
+        )
+        .bind(code)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(ApiError::database)?
+    } else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "missing_identifier",
+            "provide request_id or device_code",
+        ));
+    };
+
+    let Some(row) = row else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "CLI login request not found",
+        ));
+    };
+    if row.expires_at < Utc::now() {
+        return Err(ApiError::new(
+            StatusCode::GONE,
+            "expired",
+            "CLI login request has expired",
+        ));
+    }
+    if row.status != "pending" {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "already_used",
+            "CLI login request was already processed",
+        ));
+    }
+    if row.scopes.iter().any(|s| s == "write") {
+        auth.require_write()?;
+    }
+
+    let token_name = body
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&row.client_name);
+    let token_name: String = token_name.chars().take(64).collect();
+    let raw_token = auth::random_token("rdr");
+    let token_hash = auth::sha256_hex(&raw_token);
+
+    let token_id: Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO api_tokens (user_id, name, token_hash, scopes, auth_method)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+        "#,
+    )
+    .bind(auth.id)
+    .bind(&token_name)
+    .bind(&token_hash)
+    .bind(&row.scopes)
+    .bind(&row.method)
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+
+    let encrypted = state.cipher.encrypt(raw_token.as_bytes()).map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "crypto_error",
+            "could not seal CLI token",
+        )
+    })?;
+
+    sqlx::query(
+        r#"
+        UPDATE cli_auth_requests
+        SET status = 'approved',
+            approved_by = $2,
+            token_id = $3,
+            issued_token_enc = $4
+        WHERE id = $1
+        "#,
+    )
+    .bind(row.id)
+    .bind(auth.id)
+    .bind(token_id)
+    .bind(encrypted)
+    .execute(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+
+    audit::record(
+        &state.pool,
+        Some(auth.id),
+        "cli.auth.approve",
+        "api_token",
+        Some(&token_id.to_string()),
+        json!({ "method": row.method, "client_name": token_name }),
+        None,
+    )
+    .await;
+
+    Ok(Json(CliAuthApproveResponse {
+        request_id: row.id,
+        token_id,
+        method: row.method.clone(),
+        client_name: token_name,
+        callback_url: row.callback_url,
+        token: (row.method == "browser").then_some(raw_token),
+    }))
+}
+
+#[derive(sqlx::FromRow)]
+struct PollCliAuthRow {
+    poll_secret_hash: String,
+    status: String,
+    token_id: Option<Uuid>,
+    issued_token_enc: Option<Vec<u8>>,
+    expires_at: DateTime<Utc>,
+}
+
+async fn cli_auth_poll(
+    State(state): State<AppState>,
+    Json(body): Json<CliAuthPollRequest>,
+) -> Result<Json<CliAuthPollResponse>, ApiError> {
+    let row = sqlx::query_as::<_, PollCliAuthRow>(
+        r#"
+        SELECT secret_hash AS poll_secret_hash, status, token_id, issued_token_enc, expires_at
+        FROM cli_auth_requests
+        WHERE id = $1
+        "#,
+    )
+    .bind(body.request_id)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+
+    let Some(row) = row else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "CLI login request not found",
+        ));
+    };
+    let provided_hash = auth::sha256_hex(body.poll_secret.trim());
+    if !auth::tokens_eq(&row.poll_secret_hash, &provided_hash) {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_poll_secret",
+            "invalid poll secret",
+        ));
+    }
+    if row.expires_at < Utc::now() {
+        return Ok(Json(CliAuthPollResponse {
+            status: "expired".into(),
+            token: None,
+            token_id: None,
+        }));
+    }
+    if row.status == "approved" {
+        let Some(enc) = row.issued_token_enc.as_deref() else {
+            return Ok(Json(CliAuthPollResponse {
+                status: "consumed".into(),
+                token: None,
+                token_id: row.token_id,
+            }));
+        };
+        let plain = state.cipher.decrypt(enc).map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "crypto_error",
+                "could not unseal CLI token",
+            )
+        })?;
+        let token = String::from_utf8(plain).map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "crypto_error",
+                "could not decode CLI token",
+            )
+        })?;
+        sqlx::query(
+            r#"
+            UPDATE cli_auth_requests
+            SET status = 'consumed', issued_token_enc = NULL
+            WHERE id = $1
+            "#,
+        )
+        .bind(body.request_id)
+        .execute(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+
+        return Ok(Json(CliAuthPollResponse {
+            status: "approved".into(),
+            token: Some(token),
+            token_id: row.token_id,
+        }));
+    }
+
+    Ok(Json(CliAuthPollResponse {
+        status: row.status,
+        token: None,
+        token_id: row.token_id,
+    }))
 }
 
 async fn list_audit(

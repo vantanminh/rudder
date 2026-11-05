@@ -20,8 +20,20 @@ pub fn default_path() -> PathBuf {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .or_else(|| std::env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".config")))
         .unwrap_or_else(|| PathBuf::from("."));
     base.join("rudder").join("config.json")
+}
+
+/// Directory for local Rudder Image archives (`$RUDDER_IMAGE_DIR` or alongside `config.json`).
+pub fn images_dir(config_path: &Path) -> PathBuf {
+    if let Some(path) = std::env::var_os("RUDDER_IMAGE_DIR").filter(|v| !v.is_empty()) {
+        return PathBuf::from(path);
+    }
+    config_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("images")
 }
 
 pub fn load(path: &Path) -> anyhow::Result<Option<Saved>> {
@@ -36,29 +48,51 @@ pub fn load(path: &Path) -> anyhow::Result<Option<Saved>> {
 
 pub fn save(path: &Path, saved: &Saved) -> anyhow::Result<()> {
     use std::io::Write;
-    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 
     let Some(dir) = path.parent() else {
         bail!("{} has no parent directory", path.display());
     };
     if !dir.as_os_str().is_empty() {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(dir)
-            .with_context(|| format!("create {}", dir.display()))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(dir)
+                .with_context(|| format!("create {}", dir.display()))?;
+        }
+        #[cfg(not(unix))]
+        {
+            std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+        }
     }
     let tmp = path.with_extension("json.tmp");
     let _ = std::fs::remove_file(&tmp);
+    #[cfg(unix)]
+    let mut file = {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&tmp)
+            .with_context(|| format!("create {}", tmp.display()))?
+    };
+    #[cfg(not(unix))]
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .mode(0o600)
         .open(&tmp)
         .with_context(|| format!("create {}", tmp.display()))?;
     file.write_all(&serde_json::to_vec_pretty(saved)?)?;
     file.sync_all()?;
-    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    drop(file);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
+    }
     std::fs::rename(&tmp, path).with_context(|| format!("write {}", path.display()))?;
     Ok(())
 }
@@ -93,7 +127,6 @@ mod tests {
 
     #[test]
     fn saved_config_is_private() {
-        use std::os::unix::fs::PermissionsExt;
         let dir = std::env::temp_dir().join(format!("rudder-cli-{}", std::process::id()));
         let path = dir.join("nested").join("config.json");
         let saved = Saved {
@@ -102,8 +135,12 @@ mod tests {
         };
         save(&path, &saved).unwrap();
         save(&path, &saved).unwrap();
-        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600);
+        }
         assert_eq!(load(&path).unwrap().unwrap().token, "rdr_secret");
         assert!(load(&dir.join("missing.json")).unwrap().is_none());
         std::fs::remove_dir_all(dir).unwrap();

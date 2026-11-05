@@ -28,6 +28,7 @@ mod ratelimit;
 mod release;
 mod retention;
 mod rollout;
+mod rudder_image;
 mod schedule;
 mod stack;
 mod template;
@@ -128,6 +129,11 @@ pub use release::{
 pub use retention::{expired_ids, BackupPoint, RetentionPolicy};
 pub use rollout::{
     retire_container, rollout, HealthKind, HealthSpec, RolloutOutput, RolloutPlan, StartedContainer,
+};
+pub use rudder_image::{
+    generate_device_code, image_object_key, images_to_prune_from_r2, normalize_device_code,
+    validate_cli_auth_method, validate_cli_callback_url, validate_compression, validate_image_tag,
+    ImagePoint, ImageRetentionPolicy, CLI_AUTH_METHODS, CLI_AUTH_TTL_SECS, DEVICE_CODE_LENGTH,
 };
 pub use schedule::{is_due, next_after, parse_timezone, validate_schedule, PRESETS};
 pub use stack::{

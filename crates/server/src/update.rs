@@ -474,6 +474,7 @@ async fn write_pre_update_backup(state: &AppState) -> Result<PathBuf, Error> {
     tokio::fs::create_dir_all(&dir)
         .await
         .map_err(|error| Error::Node(format!("create {}: {error}", dir.display())))?;
+    #[cfg(unix)]
     std::fs::set_permissions(
         &dir,
         <std::fs::Permissions as std::os::unix::fs::PermissionsExt>::from_mode(0o700),
@@ -486,10 +487,11 @@ async fn write_pre_update_backup(state: &AppState) -> Result<PathBuf, Error> {
     ));
     let archive = panel::archive(&state.pool, &state.config, false).await?;
     let mut stream = panel::seal(archive, &local_backup_passphrase(&state.config))?;
-    let mut file = tokio::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
+    let mut opts = tokio::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    let mut file = opts
         .open(&path)
         .await
         .map_err(|error| Error::Node(format!("create {}: {error}", path.display())))?;
