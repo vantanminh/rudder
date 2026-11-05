@@ -278,14 +278,18 @@ pub async fn backup_panel(
             Box::pin(tokio::io::stdout())
         } else {
             Box::pin(
-                { let mut o = tokio::fs::OpenOptions::new(); #[cfg(unix)] o.mode(0o600); o }
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-
-                    .open(out)
-                    .await
-                    .with_context(|| format!("create {}", out.display()))?,
+                {
+                    let mut o = tokio::fs::OpenOptions::new();
+                    #[cfg(unix)]
+                    o.mode(0o600);
+                    o
+                }
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(out)
+                .await
+                .with_context(|| format!("create {}", out.display()))?,
             )
         };
     let mut written = 0u64;

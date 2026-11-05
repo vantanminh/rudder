@@ -29,10 +29,15 @@ curl -fsSL http://<panel>:3000/install-agent.sh | sudo sh -s -- --server http://
 
 The agent enrolls with a one-time token, then keeps an outbound gRPC session (mutual TLS) to the panel on port 7443. The server needs no inbound port except 80/443 for its own apps. Every page in the panel can then target that server. See [the agent](docs/agent.md).
 
-From your laptop or CI:
+From your laptop or CI — install the native `rudder` CLI on macOS/Linux (`curl -fsSL https://github.com/vantanminh/rudder/releases/latest/download/install-cli.sh | sh`) or Windows PowerShell (`irm https://github.com/vantanminh/rudder/releases/latest/download/install-cli.ps1 | iex`), sign in via API key, browser, or 8-character device code, and run local CI/CD builds pushed to Cloudflare R2 (see [docs/cli.md](docs/cli.md)):
 
 ```sh
-rudder login --url https://panel.example.com    # paste an API token
+rudder login --url https://panel.example.com --device  # or --browser, or paste an API token
+rudder init shop/prod/web
+rudder build && rudder push                            # local CI checks -> build -> push to Cloudflare R2
+rudder deploy                                          # deploy from R2 (or `rudder deploy --build`)
+rudder images list                                     # manage local and R2 image versions
+rudder update                                          # native self-update from GitHub Releases
 rudder deploy shop/web --image ghcr.io/acme/web:1.4.2
 rudder logs shop/web -f
 rudder cache purge shop/web --all

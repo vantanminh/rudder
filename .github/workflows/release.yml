@@ -186,8 +186,51 @@ jobs:
             ${{ steps.names.outputs.cache }}:${{ steps.names.outputs.version }}
             ${{ steps.names.outputs.latest == 'true' && format('{0}:latest', steps.names.outputs.cache) || '' }}
 
+  cli-binaries:
+    name: cli-binaries (${{ matrix.target }})
+    needs: preflight
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            asset: rudder-aarch64-apple-darwin
+            bin: rudder
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            asset: rudder-x86_64-apple-darwin
+            bin: rudder
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: rudder-x86_64-pc-windows-msvc.exe
+            bin: rudder.exe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI
+        shell: bash
+        env:
+          RUDDER_UPDATE_PUBKEY: ${{ vars.RUDDER_UPDATE_PUBKEY }}
+        run: |
+          export RUDDER_BUILD_VERSION="${GITHUB_REF_NAME#v}"
+          cargo build --release --target ${{ matrix.target }} -p rudder-cli
+          mkdir -p out-cli
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "out-cli/${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-cli-${{ matrix.target }}
+          path: out-cli/${{ matrix.asset }}
+
   release:
-    needs: [binaries, images]
+    needs: [binaries, cli-binaries, images]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -205,7 +248,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist/agents
           mv dist/rudder-agent-* dist/agents/
-          cp deploy/install.sh deploy/install-agent.sh dist/
+          cp deploy/install.sh deploy/install-agent.sh deploy/install-cli.sh deploy/install-cli.ps1 dist/
           sh deploy/release/make-release.sh "$version" dist \
             "ghcr.io/$owner/rudder:$version@${{ needs.images.outputs.panel }}" \
             "ghcr.io/$owner/rudder-cache:$version@${{ needs.images.outputs.cache }}"
