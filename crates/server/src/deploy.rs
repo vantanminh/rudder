@@ -356,8 +356,94 @@ pub(crate) struct BuiltRollout {
     pub log_prefix: String,
 }
 
+/// Load a Docker image tar stream from Rudder Image store (R2/S3) onto the target server and roll it out.
+pub(crate) async fn deploy_r2_stream(
+    state: &AppState,
+    service_id: Uuid,
+    image: String,
+    tar_stream: rudder_core::ByteStream,
+    trigger: String,
+    actor: Option<Uuid>,
+) -> Result<DeploymentView, ApiError> {
+    let service = sqlx::query_as!(
+        ServiceDeployRow,
+        r#"
+        SELECT id, name, kind, server_id, spec, status, current_container_id, current_image
+        FROM services
+        WHERE id = $1
+        "#,
+        service_id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?
+    .ok_or_else(|| not_found("service not found"))?;
+    if service.kind != "application" {
+        return Err(bad(
+            "invalid_kind",
+            "image deploy is available for application services",
+        ));
+    }
+    let server_kind = sqlx::query_scalar!(
+        r#"SELECT kind FROM servers WHERE id = $1"#,
+        service.server_id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?
+    .ok_or_else(|| not_found("server not found"))?;
+    if server_kind != "local" && state.agents.session(service.server_id).is_none() {
+        return Err(conflict(
+            "remote_unavailable",
+            "the agent for this server is not connected",
+        ));
+    }
+    let deployment_id = insert_deployment(state, service_id, &trigger, &image).await?;
+    let driver = match crate::nodes::driver_for(state, service.server_id).await {
+        Ok(driver) => driver,
+        Err(error) => {
+            mark_failed(
+                state,
+                service.id,
+                Some(deployment_id),
+                &error.public_message(),
+            )
+            .await;
+            return Err(error);
+        }
+    };
+    if let Err(error) = driver.load_image(tar_stream).await {
+        let message = error.to_string();
+        let logs = format!("failed to load {image} from Rudder Image store: {message}\n");
+        let _ = finish_deployment(state, deployment_id, "failed", Some(&message), &logs).await;
+        mark_failed(state, service.id, None, &message).await;
+        return Err(core_error(error));
+    }
+    roll_loaded_image(
+        state,
+        BuiltRollout {
+            service_id,
+            deployment_id,
+            image: image.clone(),
+            actor,
+            log_prefix: format!("loaded {image} from Rudder Image store\n"),
+        },
+        true,
+    )
+    .await?;
+    load_deployment(state, deployment_id).await
+}
+
 /// Roll a locally built image onto an existing deployment row.
 pub(crate) async fn roll_built_image(state: &AppState, roll: BuiltRollout) -> Result<(), ApiError> {
+    roll_loaded_image(state, roll, false).await
+}
+
+async fn roll_loaded_image(
+    state: &AppState,
+    roll: BuiltRollout,
+    already_on_target: bool,
+) -> Result<(), ApiError> {
     let service = sqlx::query_as!(
         ServiceDeployRow,
         r#"
@@ -494,7 +580,7 @@ pub(crate) async fn roll_built_image(state: &AppState, roll: BuiltRollout) -> Re
             return Err(error);
         }
     };
-    if state.agents.session(service.server_id).is_some() {
+    if !already_on_target && state.agents.session(service.server_id).is_some() {
         if let Err(error) =
             copy_image(state.local_driver.as_ref(), driver.as_ref(), &roll.image).await
         {

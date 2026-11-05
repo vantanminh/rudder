@@ -124,15 +124,29 @@ pub async fn load_destination(state: &AppState, id: Uuid) -> Result<Destination,
     .ok_or_else(|| not_found("S3 destination not found"))?;
     let access = decrypt_text(state, &row.access_key_id_enc)?;
     let secret = decrypt_text(state, &row.secret_access_key_enc)?;
-    let store = build_store(&StoreConfig {
-        endpoint: row.endpoint.as_deref(),
-        region: &row.region,
-        bucket: &row.bucket,
-        access_key_id: &access,
-        secret_access_key: &secret,
-        path_style: row.path_style,
-    })
-    .map_err(crate::routes::catalog::core_error)?;
+    let store: Arc<dyn ObjectStore> = if row.endpoint.as_deref() == Some("http://local.r2.internal")
+    {
+        static MOCK_STORES: std::sync::OnceLock<
+            std::sync::Mutex<std::collections::HashMap<Uuid, Arc<dyn ObjectStore>>>,
+        > = std::sync::OnceLock::new();
+        let map =
+            MOCK_STORES.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
+        map.lock()
+            .unwrap()
+            .entry(row.id)
+            .or_insert_with(|| Arc::new(object_store::memory::InMemory::new()))
+            .clone()
+    } else {
+        build_store(&StoreConfig {
+            endpoint: row.endpoint.as_deref(),
+            region: &row.region,
+            bucket: &row.bucket,
+            access_key_id: &access,
+            secret_access_key: &secret,
+            path_style: row.path_style,
+        })
+        .map_err(crate::routes::catalog::core_error)?
+    };
     Ok(Destination {
         id: row.id,
         name: row.name,
