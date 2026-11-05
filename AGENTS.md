@@ -187,3 +187,13 @@ When you add or change a panel feature:
    `mcp_covers_every_documented_route` fails otherwise.
 4. The MCP server publishes one tool per documented operation. A full-control
    grant can call all of them. Narrower grants only call tools in their scopes.
+
+## Cursor Cloud specific instructions
+
+Rust (stable, from `rust-toolchain.toml`), Node 22, and pnpm 10 are already on the image. Each boot starts PostgreSQL 16 and Docker. It does not start the panel.
+
+- The database is `postgres://rudder:rudder@127.0.0.1:5432/rudder`, the same URL as `.env.example`. The `rudder` role has `CREATEDB`, which `sqlx::test` needs. Login shells export `SQLX_OFFLINE=true` so `cargo test` and `cargo clippy` use the committed `.sqlx` cache. Unset it before `cargo sqlx prepare`.
+- Docker uses the `fuse-overlayfs` storage driver (`/etc/docker/daemon.json`). This VM has no overlay kernel module. The `ubuntu` user is in the `docker` group. Tests that start containers stay skipped unless `RUDDER_DOCKER_TESTS=1`.
+- `/var/lib/rudder` is created on boot and owned by `ubuntu`, so the variables in `.env.example` work as written. Load them, then run `cargo run -p rudder-server` (port 3000, agent listener 7443). `pnpm --dir web build` fills `web/dist`, which the binary embeds. For UI work, `pnpm --dir web dev` serves Vite on port 5173 and proxies `/api` to port 3000.
+- A fresh database has no owner. Open `/setup` and create one. The password must be at least 12 characters. The panel then shows the local Docker server as online.
+- Checks match CI: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `DATABASE_URL=postgres://rudder:rudder@127.0.0.1:5432/rudder cargo test --workspace`, `pnpm --dir web install --frozen-lockfile`, `pnpm --dir web build`, and `pnpm --dir web check:i18n`.
