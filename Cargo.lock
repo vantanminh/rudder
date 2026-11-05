@@ -3807,7 +3807,7 @@ dependencies = [
 
 [[package]]
 name = "rudder-agent"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -3833,7 +3833,7 @@ dependencies = [
 
 [[package]]
 name = "rudder-cache"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3857,21 +3857,27 @@ dependencies = [
 
 [[package]]
 name = "rudder-cli"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "anyhow",
+ "base64 0.23.1",
+ "bytes",
  "chrono",
+ "flate2",
+ "hex",
  "reqwest",
  "rudder-core",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tokio",
+ "tokio-util",
  "url",
 ]
 
 [[package]]
 name = "rudder-core"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -3905,7 +3911,7 @@ dependencies = [
 
 [[package]]
 name = "rudder-node"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "async-trait",
  "bollard",
@@ -3923,7 +3929,7 @@ dependencies = [
 
 [[package]]
 name = "rudder-proto"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "prost",
  "protoc-bin-vendored",
@@ -3935,7 +3941,7 @@ dependencies = [
 
 [[package]]
 name = "rudder-server"
-version = "0.6.1"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "argon2",

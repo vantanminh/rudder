@@ -9,6 +9,7 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **Local CI/CD build, R2 push, dual retention, and native self-update in the `rudder` CLI.** Run `rudder init` to create a `rudder.toml` project file, `rudder build` to run your local CI checks and build a compressed Docker image locally, `rudder push` to upload it to Cloudflare R2, `rudder deploy` (or `rudder deploy --build`) to deploy or re-upload local versions, `rudder images` (`list`, `prune`, `rollback`) to manage versions across your machine and R2, and `rudder update` to update the native CLI binary on macOS, Windows, and Linux.
 - **Rudder Image store on Cloudflare R2 with automatic retention pruning and deploy policies.** Connect a Cloudflare R2 or S3 destination in **Backups → S3 destinations** as the Rudder Image store, choose per-service whether a pushed image deploys immediately or only sends a notification, and set how many image versions stay on R2 to save storage cost while older versions remain on the developer's machine for rollback or re-upload.
 - **Three ways to sign in from the `rudder` CLI, with revocation on the panel.** Sign in with an API key, authorize in your browser (`rudder login --browser`), or enter an 8-character device code (`rudder login --device`) on **Account → API tokens**. Each token shows how it signed in and can be revoked at any time.
 

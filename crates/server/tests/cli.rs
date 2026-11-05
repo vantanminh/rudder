@@ -260,8 +260,11 @@ async fn cli_logs_in_deploys_reads_logs_and_purges(pool: PgPool) {
     let saved: Value = serde_json::from_slice(&std::fs::read(&config).unwrap()).unwrap();
     assert_eq!(saved["url"], panel.base.as_str());
     {
+        #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
+        #[cfg(unix)]
         let mode = std::fs::metadata(&config).unwrap().permissions().mode() & 0o777;
+        #[cfg(unix)]
         assert_eq!(mode, 0o600);
     }
 
@@ -465,5 +468,321 @@ async fn cli_logs_in_deploys_reads_logs_and_purges(pool: PgPool) {
     let out = cli(&saved_ctx, &["logout"]).await.unwrap();
     assert!(out.contains("Removed"));
     assert!(!config.exists());
+    std::fs::remove_dir_all(dir).ok();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPool) {
+    let panel = start(pool, "http://127.0.0.1:9").await;
+
+    let server = panel
+        .ok(
+            "POST",
+            "/api/v1/servers",
+            json!({ "name": "local", "kind": "local" }),
+        )
+        .await;
+    let project = panel
+        .ok("POST", "/api/v1/projects", json!({ "name": "shop" }))
+        .await;
+    let environment = panel
+        .ok(
+            "POST",
+            &format!(
+                "/api/v1/projects/{}/environments",
+                project["id"].as_str().unwrap()
+            ),
+            json!({ "name": "prod" }),
+        )
+        .await;
+    let env_id = environment["id"].as_str().unwrap();
+    let web = panel
+        .ok(
+            "POST",
+            &format!("/api/v1/environments/{env_id}/services"),
+            json!({ "name": "web", "kind": "application", "server_id": server["id"], "spec": { "image": "nginx:1.27-alpine" } }),
+        )
+        .await;
+    let web_id = web["id"].as_str().unwrap().to_owned();
+
+    // Configure Cloudflare R2 destination & image store settings + per-service retention=1
+    let r2 = panel
+        .ok(
+            "POST",
+            "/api/v1/s3-destinations",
+            json!({
+                "name": "cloudflare-r2",
+                "preset": "cloudflare_r2",
+                "endpoint": "http://local.r2.internal",
+                "region": "auto",
+                "bucket": "rudder-images",
+                "access_key_id": "test-key",
+                "secret_access_key": "test-secret",
+                "path_style": true
+            }),
+        )
+        .await;
+    panel
+        .ok(
+            "PUT",
+            "/api/v1/image-store/settings",
+            json!({
+                "destination_id": r2["id"],
+                "path_prefix": "rudder-images",
+                "r2_keep_count": 2
+            }),
+        )
+        .await;
+    panel
+        .ok(
+            "PUT",
+            &format!("/api/v1/services/{web_id}/image-policy"),
+            json!({
+                "image_auto_deploy": false,
+                "image_r2_keep_count": 1
+            }),
+        )
+        .await;
+
+    let dir = std::env::temp_dir().join(format!("rudder-cli-img-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let config = dir.join("config.json");
+
+    // 1. Test `rudder login --url <base> --device` (8-char alphanumeric device code)
+    let login_out = Output::default();
+    let login_task = {
+        let config = config.clone();
+        let base = panel.base.clone();
+        let mut out = login_out.clone();
+        tokio::spawn(async move {
+            let ctx = context(&config, None, None);
+            rudder_cli::run(
+                vec!["login".into(), "--url".into(), base, "--device".into()],
+                &ctx,
+                &mut out,
+            )
+            .await
+        })
+    };
+
+    let mut device_code = None;
+    for _ in 0..50 {
+        let text = login_out.text();
+        for line in text.lines() {
+            if let Some(code) = line.strip_prefix("Enter 8-character device code: ") {
+                device_code = Some(code.trim().to_owned());
+                break;
+            }
+        }
+        if device_code.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let code = device_code.expect("CLI should print 8-character device code");
+    assert_eq!(code.len(), 8, "device code must be 8 chars: {code}");
+    assert!(code.chars().any(|c| c.is_ascii_alphabetic()));
+    assert!(code.chars().any(|c| c.is_ascii_digit()));
+
+    panel
+        .ok(
+            "POST",
+            "/api/v1/cli/auth/approve",
+            json!({ "device_code": code }),
+        )
+        .await;
+
+    login_task.await.unwrap().unwrap();
+    assert!(
+        login_out.text().contains("Logged in to"),
+        "{}",
+        login_out.text()
+    );
+
+    let ctx = context(&config, None, None);
+
+    // 2. Test `rudder init`, `rudder build`, `rudder push`, and `rudder images list`
+    let project_file = dir.join("rudder.toml");
+    let fake_archive = dir.join("fake-docker.tar");
+    std::fs::write(&fake_archive, b"fake docker save tar payload v1").unwrap();
+    std::env::set_var("RUDDER_FAKE_DOCKER_ARCHIVE", &fake_archive);
+
+    let init_out = cli(
+        &ctx,
+        &[
+            "init",
+            "--file",
+            project_file.to_str().unwrap(),
+            "--service",
+            "shop/prod/web",
+            "--r2-keep",
+            "1",
+            "--local-keep",
+            "3",
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(init_out.contains("Created"), "{init_out}");
+
+    let build_v1 = cli(
+        &ctx,
+        &[
+            "build",
+            "--file",
+            project_file.to_str().unwrap(),
+            "--tag",
+            "v1.0.0",
+            "--no-check",
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(
+        build_v1.contains("Built rudder-image/web:v1.0.0"),
+        "{build_v1}"
+    );
+
+    let push_v1 = cli(
+        &ctx,
+        &["push", "v1.0.0", "--file", project_file.to_str().unwrap()],
+    )
+    .await
+    .unwrap();
+    assert!(
+        push_v1.contains("Image v1.0.0 is stored in R2"),
+        "{push_v1}"
+    );
+
+    // Build and push v1.0.1 -> v1.0.0 should be pruned from R2 (keep=1) while kept locally
+    std::fs::write(&fake_archive, b"fake docker save tar payload v2").unwrap();
+    cli(
+        &ctx,
+        &[
+            "build",
+            "--file",
+            project_file.to_str().unwrap(),
+            "--tag",
+            "v1.0.1",
+            "--no-check",
+        ],
+    )
+    .await
+    .unwrap();
+    let push_v2 = cli(
+        &ctx,
+        &["push", "v1.0.1", "--file", project_file.to_str().unwrap()],
+    )
+    .await
+    .unwrap();
+    assert!(
+        push_v2.contains("Pruned old versions from R2 (still kept locally): v1.0.0"),
+        "{push_v2}"
+    );
+
+    let images_out = cli(
+        &ctx,
+        &["images", "list", "--file", project_file.to_str().unwrap()],
+    )
+    .await
+    .unwrap();
+    assert!(images_out.contains("v1.0.1"), "{images_out}");
+    assert!(images_out.contains("local + R2"), "{images_out}");
+    assert!(images_out.contains("v1.0.0"), "{images_out}");
+    assert!(images_out.contains("local only"), "{images_out}");
+
+    std::env::remove_var("RUDDER_FAKE_DOCKER_ARCHIVE");
+
+    // 3. Test `rudder update` against a mock GitHub release server
+    let asset_name = rudder_cli::update::current_target_asset().unwrap();
+    let new_binary = b"#!/bin/sh\necho rudder-0.99.0\n".to_vec();
+    let sha = rudder_core::sha256_hex(&new_binary);
+    let sums_body = format!("{sha}  {asset_name}\n");
+
+    let gh_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let gh_base = format!("http://{}", gh_listener.local_addr().unwrap());
+    let gh_base_for_route = gh_base.clone();
+    let asset_for_route = asset_name.clone();
+    let bin_for_route = new_binary.clone();
+    let gh_router = axum::Router::new()
+        .route(
+            "/repos/vantanminh/rudder/releases/latest",
+            axum::routing::get(move || {
+                let base = gh_base_for_route.clone();
+                let asset = asset_for_route.clone();
+                async move {
+                    axum::Json(json!({
+                        "tag_name": "v0.99.0",
+                        "assets": [
+                            {
+                                "name": "SHA256SUMS",
+                                "browser_download_url": format!("{base}/download/SHA256SUMS")
+                            },
+                            {
+                                "name": asset,
+                                "browser_download_url": format!("{base}/download/bin")
+                            }
+                        ]
+                    }))
+                }
+            }),
+        )
+        .route(
+            "/download/SHA256SUMS",
+            axum::routing::get(move || {
+                let sums = sums_body.clone();
+                async move { sums }
+            }),
+        )
+        .route(
+            "/download/bin",
+            axum::routing::get(move || {
+                let bin = bin_for_route.clone();
+                async move { bin }
+            }),
+        );
+    tokio::spawn(async move { axum::serve(gh_listener, gh_router).await.unwrap() });
+
+    let target_bin = dir.join("rudder-bin");
+    std::fs::write(&target_bin, b"old-binary").unwrap();
+
+    let check_out = cli(
+        &ctx,
+        &[
+            "update",
+            "--check",
+            "--api-url",
+            &gh_base,
+            "--current-version",
+            "0.5.1",
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(
+        check_out.contains("Update available: rudder 0.5.1 -> 0.99.0"),
+        "{check_out}"
+    );
+
+    let update_out = cli(
+        &ctx,
+        &[
+            "update",
+            "--api-url",
+            &gh_base,
+            "--current-version",
+            "0.5.1",
+            "--target-path",
+            target_bin.to_str().unwrap(),
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(
+        update_out.contains("Updated rudder to 0.99.0"),
+        "{update_out}"
+    );
+    assert_eq!(std::fs::read(&target_bin).unwrap(), new_binary);
+
     std::fs::remove_dir_all(dir).ok();
 }
