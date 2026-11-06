@@ -55,6 +55,9 @@ const ProjectsPage = lazy(() =>
 const RegistriesPage = lazy(() =>
   import("./pages/RegistriesPage").then((m) => ({ default: m.RegistriesPage })),
 );
+const RudderImagePage = lazy(() =>
+  import("./pages/RudderImagePage").then((m) => ({ default: m.RudderImagePage })),
+);
 const S3DestinationsPage = lazy(() =>
   import("./pages/S3DestinationsPage").then((m) => ({ default: m.S3DestinationsPage })),
 );
@@ -124,6 +127,7 @@ function AppRoutes() {
         <Route path="logs" element={<LogsPage />} />
         <Route path="backups" element={<BackupsPage />} />
         <Route path="s3-destinations" element={<S3DestinationsPage />} />
+        <Route path="rudder-image" element={<RudderImagePage />} />
         <Route path="cache" element={<CachePoliciesPage />} />
         <Route path="certificates" element={<CertificatesPage />} />
         <Route path="security" element={<SecurityPage />} />

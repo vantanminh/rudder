@@ -9,7 +9,12 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 ## [Unreleased]
 
 ### Added
+- **A Rudder Image page to manage images on your servers.** **S3 → Rudder Image** shows whether the bucket, retention, CLI client, and first push are set up, checks the bucket with a live write/read/delete test, charts pushes, builds, and image deploys over 30 days, lists usage per service and the latest pushes, and shows every `rudder login` client. You can deploy, free bucket space for, or delete any version, and set the bucket and retention (by count and by days) from the same page.
+- **Rudder Image status on the Overview page.** A small card shows the bucket, signed-in clients, versions on R2, recent pushes, and how many setup steps are left.
 - **Rudder Image overview in the API and for AI agents.** `GET /api/v1/image-store/overview` returns setup status, push and build counts for the last 30 days, per-service usage on the bucket, recent pushes, and the command-line clients that signed in; `POST /api/v1/image-store/test` checks the bucket by writing, reading, and deleting a probe object. Both are available as MCP tools in the `source` scope.
+
+### Changed
+- **The menu is regrouped.** **S3** now holds S3 destinations, Rudder Image, and Backups; **Observe** has Monitoring, Load, Logs, and Alerts; **Network & security** has Security, Certificates, and Cache; **Integrations** has Git providers and Registries. The Rudder Image store settings moved from S3 destinations to the new Rudder Image page (**Setup** tab).
 
 ## [0.7.0] - 2026-11-05
 
