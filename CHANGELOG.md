@@ -13,6 +13,11 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 - **Rudder Image status on the Overview page.** A small card shows the bucket, signed-in clients, versions on R2, recent pushes, and how many setup steps are left.
 - **Rudder Image overview in the API and for AI agents.** `GET /api/v1/image-store/overview` returns setup status, push and build counts for the last 30 days, per-service usage on the bucket, recent pushes, and the command-line clients that signed in; `POST /api/v1/image-store/test` checks the bucket by writing, reading, and deleting a probe object. Both are available as MCP tools in the `source` scope.
 
+- **`rudder status`, `rudder whoami`, and `rudder images remove`.** `rudder status` shows the Rudder Image setup checklist, push and build counts, and usage per service (`--check` also tests the bucket); `rudder whoami` shows the panel and account in use; `rudder images remove <tag>` deletes a version from the bucket and the history, or only frees its bucket space with `--r2-only`.
+
+### Fixed
+- **`rudder login --browser` and `--device` work when you are not signed in to the panel yet.** The panel used to drop the authorization page when it sent you to the sign-in form, so the request was never approved; after signing in you now land back on it.
+
 ### Changed
 - **The menu is regrouped.** **S3** now holds S3 destinations, Rudder Image, and Backups; **Observe** has Monitoring, Load, Logs, and Alerts; **Network & security** has Security, Certificates, and Cache; **Integrations** has Git providers and Registries. The Rudder Image store settings moved from S3 destinations to the new Rudder Image page (**Setup** tab).
 

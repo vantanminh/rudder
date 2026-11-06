@@ -174,12 +174,24 @@ rudder deploy --build               # run full local CI check -> build -> push t
 
 If you deploy or roll back to an older `<tag>` that was already pruned from Cloudflare R2 to save storage space, `rudder` automatically detects the local archive on your machine, re-uploads it to R2, and deploys it.
 
+### Check the setup (`rudder status`, `rudder whoami`)
+
+```bash
+rudder whoami            # which panel and account this CLI is signed in to
+rudder status            # bucket, setup checklist, push/build counts, usage per service
+rudder status --check    # also writes, reads, and deletes a probe object in the bucket
+```
+
+`rudder status` prints the same facts as **S3 → Rudder Image** in the panel.
+
 ### Step 4: Manage local & R2 image versions (`rudder images`)
 
 ```sh
 rudder images list                  # list versions across local storage and Cloudflare R2
 rudder images prune --keep 10       # prune local archives on your machine, keeping the newest 10
 rudder images rollback v1.3.9       # roll back to v1.3.9 (from R2, or re-uploading from local if pruned from R2)
+rudder images remove v1.3.9         # forget v1.3.9 on the panel and delete it from R2
+rudder images remove v1.3.9 --r2-only   # only free its space on R2; keep the history
 ```
 
 Example output of `rudder images list`:
