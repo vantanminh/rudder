@@ -31,7 +31,9 @@ Usage:
   rudder build [<service>] [--tag TAG] [--skip-checks]    run local CI checks, build Docker image & save locally
   rudder push [TAG] [--service S] [--deploy]              upload a local image archive to Cloudflare R2
   rudder deploy [<service>] [--image TAG] [--build]       deploy from R2 (or check+build+push+deploy with --build)
-  rudder images [<service>] [list | prune --keep N | rollback TAG]
+  rudder images [<service>] [list | prune --keep N | rollback TAG | remove TAG [--r2-only]]
+  rudder status [--check]                                 Rudder Image setup, bucket check, push and build statistics
+  rudder whoami                                           show the panel, account, and role this CLI is signed in to
   rudder services                                         list services
   rudder logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]
   rudder cache purge <service> (--all | --path P... | --prefix P) [--domain ID]
@@ -110,6 +112,8 @@ pub async fn run(
         Some("images") => images_cmd(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
         Some("update" | "self-update") => update::run(args.collect(), out).await,
         Some("services") => services(&Api::from_context(ctx)?, out).await,
+        Some("whoami") => whoami(&Api::from_context(ctx)?, out).await,
+        Some("status") => status(&Api::from_context(ctx)?, args.collect(), out).await,
         Some("deploy") => deploy(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
         Some("logs") => logs(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
         Some("cache") => match args.next().as_deref() {
@@ -203,6 +207,10 @@ impl Api {
 
     async fn get(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
         self.call(reqwest::Method::GET, path, query, None).await
+    }
+
+    async fn delete(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
+        self.call(reqwest::Method::DELETE, path, query, None).await
     }
 
     async fn post(&self, path: &str, body: Value) -> anyhow::Result<Value> {
@@ -786,12 +794,14 @@ async fn images_cmd(
     let mut service_spec = None;
     let mut target_tag = None;
     let mut keep_count: Option<u32> = None;
+    let mut r2_only = false;
     let mut file_path = None;
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            "list" | "prune" | "rollback" => subcmd = arg,
+            "list" | "prune" | "rollback" | "remove" => subcmd = arg,
+            "--r2-only" => r2_only = true,
             "--service" | "-s" => {
                 service_spec = Some(iter.next().context("--service needs a value")?)
             }
@@ -808,7 +818,7 @@ async fn images_cmd(
             }
             other if other.starts_with('-') => bail!("unknown option {other}"),
             other => {
-                if subcmd == "rollback" && target_tag.is_none() {
+                if (subcmd == "rollback" || subcmd == "remove") && target_tag.is_none() {
                     target_tag = Some(other.to_owned());
                 } else if service_spec.is_none() {
                     service_spec = Some(other.to_owned());
@@ -844,6 +854,44 @@ async fn images_cmd(
                 removed.len(),
                 service.path()
             )?;
+            Ok(())
+        }
+        "remove" => {
+            let tag =
+                target_tag.context("usage: rudder images <service> remove <tag> [--r2-only]")?;
+            let remote = api
+                .get(&format!("/api/v1/services/{}/images", service.id), &[])
+                .await?;
+            let id = remote
+                .as_array()
+                .and_then(|list| {
+                    list.iter()
+                        .find(|r| r["tag"].as_str() == Some(tag.as_str()))
+                })
+                .and_then(|r| r["id"].as_str())
+                .map(str::to_owned)
+                .with_context(|| format!("no version '{tag}' on record for {}", service.path()))?;
+            let query = if r2_only {
+                vec![("r2_only", "true".to_owned())]
+            } else {
+                Vec::new()
+            };
+            api.delete(
+                &format!("/api/v1/services/{}/images/{id}", service.id),
+                &query,
+            )
+            .await?;
+            if r2_only {
+                writeln!(
+                    out,
+                    "Freed {tag} from Cloudflare R2 (history kept; local copy untouched)"
+                )?;
+            } else {
+                writeln!(
+                    out,
+                    "Removed {tag} from Cloudflare R2 and the version history"
+                )?;
+            }
             Ok(())
         }
         "rollback" => {
@@ -1026,6 +1074,137 @@ async fn services(api: &Api, out: &mut (dyn Write + Send)) -> anyhow::Result<()>
             service.status
         )?;
     }
+    Ok(())
+}
+
+async fn whoami(api: &Api, out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    let me = api.get("/api/v1/me", &[]).await?;
+    writeln!(out, "Panel:   {}", api.base)?;
+    writeln!(
+        out,
+        "Account: {} ({})",
+        me["user"]["email"].as_str().unwrap_or("?"),
+        me["user"]["role"].as_str().unwrap_or("?")
+    )?;
+    Ok(())
+}
+
+fn human_bytes(bytes: i64) -> String {
+    let units = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut value = bytes.max(0) as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < units.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{} B", bytes.max(0))
+    } else {
+        format!("{value:.1} {}", units[unit])
+    }
+}
+
+/// `rudder status [--check]`: the same facts as the panel's Rudder Image page.
+async fn status(api: &Api, args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    let mut check = false;
+    for arg in args {
+        match arg.as_str() {
+            "--check" => check = true,
+            other => bail!("unknown option {other}; usage: rudder status [--check]"),
+        }
+    }
+    let overview = api.get("/api/v1/image-store/overview", &[]).await?;
+    writeln!(out, "Rudder Image on {}", api.base)?;
+    match overview["destination"]["name"].as_str() {
+        Some(name) => writeln!(
+            out,
+            "  Bucket:      {name} ({})",
+            overview["destination"]["bucket"].as_str().unwrap_or("?")
+        )?,
+        None => writeln!(
+            out,
+            "  Bucket:      not set (panel: S3 > Rudder Image > Setup)"
+        )?,
+    }
+    if check {
+        if overview["destination"].is_null() {
+            writeln!(out, "  Connection:  skipped, no bucket")?;
+        } else {
+            let probe = api.post("/api/v1/image-store/test", json!({})).await?;
+            if probe["ok"].as_bool() == Some(true) {
+                writeln!(out, "  Connection:  ok (write, read, delete)")?;
+            } else {
+                writeln!(
+                    out,
+                    "  Connection:  FAILING: {}",
+                    probe["message"].as_str().unwrap_or("unknown error")
+                )?;
+            }
+        }
+    }
+    let n = |v: &Value| v.as_i64().unwrap_or(0);
+    let totals = &overview["totals"];
+    writeln!(
+        out,
+        "  Versions:    {} on record, {} on R2 ({}), {} pruned",
+        n(&totals["images"]),
+        n(&totals["r2_images"]),
+        human_bytes(n(&totals["r2_bytes"])),
+        n(&totals["pruned_images"])
+    )?;
+    writeln!(
+        out,
+        "  Pushes:      {} in 24h, {} in 7d, {} in 30d",
+        n(&totals["pushes_24h"]),
+        n(&totals["pushes_7d"]),
+        n(&totals["pushes_30d"])
+    )?;
+    let builds = &overview["builds"];
+    writeln!(
+        out,
+        "  Builds 30d:  {} ({} ok, {} failed); {} running, {} queued; {} image deploys",
+        n(&builds["builds_30d"]),
+        n(&builds["succeeded_30d"]),
+        n(&builds["failed_30d"]),
+        n(&builds["running"]),
+        n(&builds["queued"]),
+        n(&builds["image_deploys_30d"])
+    )?;
+    writeln!(out, "\nSetup:")?;
+    for step in overview["setup"].as_array().into_iter().flatten() {
+        let mark = match step["state"].as_str() {
+            Some("ok") => "[x]",
+            Some("optional") => "[-]",
+            _ => "[ ]",
+        };
+        writeln!(
+            out,
+            "  {mark} {:<12} {}",
+            step["key"].as_str().unwrap_or("?"),
+            step["detail"].as_str().unwrap_or("")
+        )?;
+    }
+    let services = overview["services"].as_array().cloned().unwrap_or_default();
+    if !services.is_empty() {
+        writeln!(out, "\nServices:")?;
+        for svc in services {
+            writeln!(
+                out,
+                "  {:<40} {:>3} versions  {:>10}  latest {}  {}",
+                svc["path"].as_str().unwrap_or("?"),
+                n(&svc["images"]),
+                human_bytes(n(&svc["r2_bytes"])),
+                svc["last_tag"].as_str().unwrap_or("-"),
+                if svc["auto_deploy"].as_bool() == Some(true) {
+                    "deploys on push"
+                } else {
+                    "notify only"
+                }
+            )?;
+        }
+    }
+    let clients = overview["clients"].as_array().map_or(0, Vec::len);
+    writeln!(out, "\nSigned-in clients: {clients}")?;
     Ok(())
 }
 

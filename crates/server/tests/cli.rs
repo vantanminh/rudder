@@ -691,6 +691,57 @@ async fn cli_device_login_image_build_push_retention_and_self_update(pool: PgPoo
     assert!(images_out.contains("v1.0.0"), "{images_out}");
     assert!(images_out.contains("local only"), "{images_out}");
 
+    // `rudder whoami` and `rudder status` read the same data as the panel's Rudder Image page.
+    let whoami_out = cli(&ctx, &["whoami"]).await.unwrap();
+    assert!(whoami_out.contains("Account:"), "{whoami_out}");
+    let status_out = cli(&ctx, &["status", "--check"]).await.unwrap();
+    assert!(status_out.contains("Bucket:"), "{status_out}");
+    assert!(status_out.contains("Connection:  ok"), "{status_out}");
+    assert!(status_out.contains("[x] bucket"), "{status_out}");
+    assert!(status_out.contains("[x] first_push"), "{status_out}");
+    assert!(status_out.contains("shop/prod/web"), "{status_out}");
+
+    // `rudder images remove` frees the bucket copy, then forgets the version.
+    let freed = cli(
+        &ctx,
+        &[
+            "images",
+            "remove",
+            "v1.0.1",
+            "--r2-only",
+            "--file",
+            project_file.to_str().unwrap(),
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(freed.contains("Freed v1.0.1"), "{freed}");
+    let removed = cli(
+        &ctx,
+        &[
+            "images",
+            "remove",
+            "v1.0.1",
+            "--file",
+            project_file.to_str().unwrap(),
+        ],
+    )
+    .await
+    .unwrap();
+    assert!(removed.contains("Removed v1.0.1"), "{removed}");
+    let gone = cli(
+        &ctx,
+        &[
+            "images",
+            "remove",
+            "v1.0.1",
+            "--file",
+            project_file.to_str().unwrap(),
+        ],
+    )
+    .await;
+    assert!(gone.is_err(), "removing a forgotten version should fail");
+
     std::env::remove_var("RUDDER_FAKE_DOCKER_ARCHIVE");
 
     // 3. Test `rudder update` against a mock GitHub release server

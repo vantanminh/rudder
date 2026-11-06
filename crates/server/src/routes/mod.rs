@@ -11,6 +11,7 @@ pub mod git;
 pub mod github_app;
 pub mod github_repos;
 pub mod health;
+pub mod image_overview;
 pub mod images;
 pub mod load;
 pub mod logs;

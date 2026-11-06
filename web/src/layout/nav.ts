@@ -20,24 +20,35 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     ],
   },
   {
-    label: msg("Operate"),
+    label: msg("Observe"),
     items: [
       ["/monitoring", msg("Monitoring"), "activity"],
-      ["/security", msg("Security"), "shield"],
       ["/load", msg("Load"), "gauge"],
-      ["/alerts", msg("Alerts"), "bell"],
       ["/logs", msg("Logs"), "logs"],
+      ["/alerts", msg("Alerts"), "bell"],
+    ],
+  },
+  {
+    label: msg("S3"),
+    items: [
+      ["/s3-destinations", msg("S3 destinations"), "bucket"],
+      ["/rudder-image", msg("Rudder Image"), "box"],
       ["/backups", msg("Backups"), "archive"],
+    ],
+  },
+  {
+    label: msg("Network & security"),
+    items: [
+      ["/security", msg("Security"), "shield"],
+      ["/certificates", msg("Certificates"), "lock"],
       ["/cache", msg("Cache"), "zap"],
     ],
   },
   {
-    label: msg("Connections"),
+    label: msg("Integrations"),
     items: [
-      ["/s3-destinations", msg("S3 destinations"), "bucket"],
-      ["/certificates", msg("Certificates"), "shield"],
-      ["/registries", msg("Registries"), "box"],
       ["/git", msg("Git providers"), "git"],
+      ["/registries", msg("Registries"), "box"],
     ],
   },
   {

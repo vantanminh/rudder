@@ -85,7 +85,7 @@ function safeNext(value: string | null): string | null {
     return null;
   }
   const path = value.split("?")[0];
-  if (path === "/oauth/authorize" || path === "/mcp/consent") {
+  if (path === "/oauth/authorize" || path === "/mcp/consent" || path === "/tokens") {
     return value;
   }
   return null;

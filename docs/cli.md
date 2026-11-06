@@ -79,17 +79,27 @@ Open **Account → API tokens** in the Rudder dashboard, enter the 8-character c
 
 ## 3. Configure Cloudflare R2 for Rudder Image
 
-1. In the Rudder web panel, open **Backups → S3 destinations**.
+1. In the Rudder web panel, open **S3 → S3 destinations**.
 2. Under **New destination**, pick the **Cloudflare R2** preset, fill in your R2 endpoint (`https://<account-id>.r2.cloudflarestorage.com`), bucket name, Access Key ID, and Secret Access Key, and click **Add destination**.
-3. At the top of **Backups → S3 destinations**, in the **Rudder Image store (Cloudflare R2)** card:
-   - Select your Cloudflare R2 bucket as the **Image store bucket**.
+3. Open **S3 → Rudder Image → Setup** and, in the **Image store** card:
+   - Select your Cloudflare R2 bucket as the **Bucket**.
    - Set the **Object key prefix** (default `rudder-images`).
-   - Optionally set **Keep on R2 (versions per service)** (for example `10`) so older images are automatically deleted from Cloudflare R2 to save storage cost while remaining on the developer's machine.
+   - Optionally set **Keep on R2 (versions per service)** and **Keep on R2 (days)** so older images are automatically deleted from Cloudflare R2 to save storage cost while remaining on the developer's machine.
 4. On each application service (**Services → `<app>` → General → Rudder Image**), configure the per-service policy:
    - **Auto-deploy immediately when a new image is pushed**:
      - **On (default)**: `rudder push` immediately loads the image from R2 into Docker on the target server and deploys it.
      - **Off**: `rudder push` stores the image in R2 and emits an `image.pushed` notification without deploying until you run `rudder deploy` (or click **Deploy** in the panel).
    - **Keep on Cloudflare R2 (versions)**: optional per-service override for how many versions stay in R2.
+
+### The Rudder Image page
+
+**S3 → Rudder Image** is the place to watch it all:
+
+- **Overview**: a status checklist (bucket, retention, signed-in CLI clients, first push, deploy-on-push), a live **Check bucket** test that writes, reads, and deletes a probe object, push, build, and image-deploy counts for the last 30 days with a daily chart, usage per service, the latest pushes, and every command-line client signed in with `--browser` or `--device`.
+- **Images**: every version of a service, whether it is still on the bucket, with **Deploy**, **Free bucket space** (delete from the bucket, keep the history), and **Delete**.
+- **Setup**: the bucket, prefix, and retention, plus the commands to connect the CLI.
+
+The **Overview** page of the panel also shows a small Rudder Image card with the same status. The same data is available to AI agents through `GET /api/v1/image-store/overview` and `POST /api/v1/image-store/test` (MCP scope `source`).
 
 ---
 
@@ -164,12 +174,24 @@ rudder deploy --build               # run full local CI check -> build -> push t
 
 If you deploy or roll back to an older `<tag>` that was already pruned from Cloudflare R2 to save storage space, `rudder` automatically detects the local archive on your machine, re-uploads it to R2, and deploys it.
 
+### Check the setup (`rudder status`, `rudder whoami`)
+
+```bash
+rudder whoami            # which panel and account this CLI is signed in to
+rudder status            # bucket, setup checklist, push/build counts, usage per service
+rudder status --check    # also writes, reads, and deletes a probe object in the bucket
+```
+
+`rudder status` prints the same facts as **S3 → Rudder Image** in the panel.
+
 ### Step 4: Manage local & R2 image versions (`rudder images`)
 
 ```sh
 rudder images list                  # list versions across local storage and Cloudflare R2
 rudder images prune --keep 10       # prune local archives on your machine, keeping the newest 10
 rudder images rollback v1.3.9       # roll back to v1.3.9 (from R2, or re-uploading from local if pruned from R2)
+rudder images remove v1.3.9         # forget v1.3.9 on the panel and delete it from R2
+rudder images remove v1.3.9 --r2-only   # only free its space on R2; keep the history
 ```
 
 Example output of `rudder images list`:

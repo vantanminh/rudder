@@ -7,7 +7,7 @@
       "name": "MIT",
       "identifier": "MIT"
     },
-    "version": "0.7.0"
+    "version": "0.8.0"
   },
   "paths": {
     "/.well-known/oauth-authorization-server": {
@@ -2509,6 +2509,27 @@
         }
       }
     },
+    "/api/v1/image-store/overview": {
+      "get": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
+        "operationId": "get_v1_image-store_overview",
+        "responses": {
+          "200": {
+            "description": "Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageStoreOverview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/image-store/settings": {
       "get": {
         "tags": [
@@ -2551,6 +2572,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ImageStoreSettingsView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/image-store/test": {
+      "post": {
+        "tags": [
+          "source"
+        ],
+        "summary": "Check the Rudder Image bucket by writing, reading, and deleting a probe object",
+        "operationId": "post_v1_image-store_test",
+        "responses": {
+          "200": {
+            "description": "Check the Rudder Image bucket by writing, reading, and deleting a probe object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestResult"
                 }
               }
             }
@@ -6694,6 +6736,50 @@
           }
         }
       },
+      "BuildTotals": {
+        "type": "object",
+        "required": [
+          "builds_30d",
+          "succeeded_30d",
+          "failed_30d",
+          "running",
+          "queued",
+          "image_deploys_30d",
+          "image_deploy_failures_30d"
+        ],
+        "properties": {
+          "builds_30d": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Builds the panel ran from Git in the last 30 days."
+          },
+          "failed_30d": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "image_deploy_failures_30d": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "image_deploys_30d": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Deployments rolled out from a Rudder Image in the last 30 days."
+          },
+          "queued": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "running": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "succeeded_30d": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "BuildsCancelled": {
         "type": "object",
         "required": [
@@ -9103,6 +9189,258 @@
           }
         }
       },
+      "ImageClient": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "auth_method",
+          "user_email",
+          "scopes",
+          "created_at"
+        ],
+        "properties": {
+          "auth_method": {
+            "type": "string",
+            "description": "`browser` or `device_code`."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "user_email": {
+            "type": "string"
+          }
+        }
+      },
+      "ImageDay": {
+        "type": "object",
+        "required": [
+          "day",
+          "pushes",
+          "bytes",
+          "builds",
+          "failed_builds",
+          "image_deploys"
+        ],
+        "properties": {
+          "builds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "failed_builds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "image_deploys": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pushes": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ImageServiceStat": {
+        "type": "object",
+        "required": [
+          "service_id",
+          "path",
+          "images",
+          "r2_images",
+          "r2_bytes",
+          "auto_deploy"
+        ],
+        "properties": {
+          "auto_deploy": {
+            "type": "boolean"
+          },
+          "images": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "last_push_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_tag": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "description": "`project/environment/service`."
+          },
+          "r2_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "r2_images": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ImageSetupStep": {
+        "type": "object",
+        "required": [
+          "key",
+          "state",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "`bucket`, `retention`, `client`, `first_push`, or `auto_deploy`."
+          },
+          "state": {
+            "type": "string",
+            "description": "`ok`, `todo`, or `optional` (not done, but nothing is broken)."
+          }
+        }
+      },
+      "ImageStoreDestination": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "bucket",
+          "region"
+        ],
+        "properties": {
+          "bucket": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        }
+      },
+      "ImageStoreOverview": {
+        "type": "object",
+        "required": [
+          "settings",
+          "setup",
+          "totals",
+          "builds",
+          "daily",
+          "services",
+          "recent_pushes",
+          "clients"
+        ],
+        "properties": {
+          "builds": {
+            "$ref": "#/components/schemas/BuildTotals"
+          },
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageClient"
+            }
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageDay"
+            }
+          },
+          "destination": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ImageStoreDestination"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent_pushes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentImagePush"
+            }
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageServiceStat"
+            }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ImageStoreSettingsView"
+          },
+          "setup": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImageSetupStep"
+            }
+          },
+          "totals": {
+            "$ref": "#/components/schemas/ImageTotals"
+          }
+        }
+      },
       "ImageStoreSettingsView": {
         "type": "object",
         "required": [
@@ -9149,6 +9487,62 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ImageTotals": {
+        "type": "object",
+        "required": [
+          "images",
+          "r2_images",
+          "pruned_images",
+          "r2_bytes",
+          "services",
+          "pushes_24h",
+          "pushes_7d",
+          "pushes_30d",
+          "pushed_bytes_30d"
+        ],
+        "properties": {
+          "images": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versions on record, on R2 or already pruned."
+          },
+          "pruned_images": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versions pruned from the bucket by retention."
+          },
+          "pushed_bytes_30d": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pushes_24h": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pushes_30d": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pushes_7d": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "r2_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bytes the bucket holds for Rudder Images."
+          },
+          "r2_images": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Versions that can still be deployed from the bucket."
+          },
+          "services": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -10378,6 +10772,61 @@
             "items": {
               "$ref": "#/components/schemas/SkippedHost"
             }
+          }
+        }
+      },
+      "RecentImagePush": {
+        "type": "object",
+        "required": [
+          "id",
+          "service_id",
+          "path",
+          "tag",
+          "size_bytes",
+          "compression",
+          "r2_present",
+          "created_at"
+        ],
+        "properties": {
+          "compression": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "git_sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "path": {
+            "type": "string"
+          },
+          "pushed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "r2_present": {
+            "type": "boolean"
+          },
+          "service_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tag": {
+            "type": "string"
           }
         }
       },

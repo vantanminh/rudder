@@ -63,6 +63,10 @@ use crate::routes::github_app::{
 };
 use crate::routes::github_repos::{GithubBranchesView, GithubComposeFilesView, GithubRepoView};
 use crate::routes::health::HealthResponse;
+use crate::routes::image_overview::{
+    BuildTotals, ImageClient, ImageDay, ImageServiceStat, ImageSetupStep, ImageStoreDestination,
+    ImageStoreOverview, ImageTotals, RecentImagePush,
+};
 use crate::routes::images::{
     DeployRudderImageRequest, ImageStoreSettingsView, PushImageRequest, PushedImageResponse,
     RudderImageView, ServiceImagePolicyView, UpdateImageStoreSettings, UpdateServiceImagePolicy,
@@ -183,6 +187,15 @@ use rudder_core::{
         BuildAccepted,
         BuildQueueView,
         ImageStoreSettingsView,
+        ImageStoreOverview,
+        ImageSetupStep,
+        ImageStoreDestination,
+        ImageTotals,
+        BuildTotals,
+        ImageDay,
+        ImageServiceStat,
+        RecentImagePush,
+        ImageClient,
         UpdateImageStoreSettings,
         ServiceImagePolicyView,
         UpdateServiceImagePolicy,
@@ -1082,6 +1095,24 @@ pub(crate) const ROUTES: &[Route] = &[
         summary: "Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images",
         request: Some("UpdateImageStoreSettings"),
         response: Some("ImageStoreSettingsView"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/image-store/overview",
+        method: HttpMethod::Get,
+        tag: "source",
+        summary: "Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients",
+        request: None,
+        response: Some("ImageStoreOverview"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/image-store/test",
+        method: HttpMethod::Post,
+        tag: "source",
+        summary: "Check the Rudder Image bucket by writing, reading, and deleting a probe object",
+        request: None,
+        response: Some("TestResult"),
         status: 200,
     },
     Route {

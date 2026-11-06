@@ -328,6 +328,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::databases::router())
         .merge(routes::backups::router())
         .merge(routes::images::router())
+        .merge(routes::image_overview::router())
         .merge(routes::stacks::router())
         .merge(routes::cache::router())
         .merge(routes::logs::router())

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { Icon, type IconName } from "../components/icons";
+import { ImageStatusCard } from "../components/image-status";
 import {
   holdText,
   PanelLoadCard,
@@ -327,6 +328,7 @@ export function DashboardPage() {
         </div>
         <div className="grid min-w-0 gap-6">
           <PanelLoadCard />
+          <ImageStatusCard />
           <ServersCard servers={serverList} usage={usage} loading={servers.isLoading} />
           <ActivityCard
             events={events.data ?? []}

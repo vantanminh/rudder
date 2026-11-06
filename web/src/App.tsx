@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { ApiError } from "./api";
 import { AuthProvider, useAuth } from "./auth";
@@ -55,6 +55,9 @@ const ProjectsPage = lazy(() =>
 const RegistriesPage = lazy(() =>
   import("./pages/RegistriesPage").then((m) => ({ default: m.RegistriesPage })),
 );
+const RudderImagePage = lazy(() =>
+  import("./pages/RudderImagePage").then((m) => ({ default: m.RudderImagePage })),
+);
 const S3DestinationsPage = lazy(() =>
   import("./pages/S3DestinationsPage").then((m) => ({ default: m.S3DestinationsPage })),
 );
@@ -81,6 +84,7 @@ const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default:
 function Guard({ children }: { children: ReactNode }) {
   const { user, loading, needsSetup } = useAuth();
   const t = useT();
+  const location = useLocation();
   if (loading) {
     return <p className="p-6 text-sm text-muted">{t("Loading Rudder…")}</p>;
   }
@@ -88,7 +92,10 @@ function Guard({ children }: { children: ReactNode }) {
     return <Navigate to="/setup" replace />;
   }
   if (!user) {
-    return <Navigate to="/login" replace />;
+    // `rudder login` sends people to /tokens?cli_request=…; bring them back there after sign-in.
+    const target = location.pathname + location.search;
+    const next = target !== "/" ? `?next=${encodeURIComponent(target)}` : "";
+    return <Navigate to={`/login${next}`} replace />;
   }
   return children;
 }
@@ -124,6 +131,7 @@ function AppRoutes() {
         <Route path="logs" element={<LogsPage />} />
         <Route path="backups" element={<BackupsPage />} />
         <Route path="s3-destinations" element={<S3DestinationsPage />} />
+        <Route path="rudder-image" element={<RudderImagePage />} />
         <Route path="cache" element={<CachePoliciesPage />} />
         <Route path="certificates" element={<CertificatesPage />} />
         <Route path="security" element={<SecurityPage />} />

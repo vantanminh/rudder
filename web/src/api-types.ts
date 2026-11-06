@@ -1407,6 +1407,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/image-store/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
+        get: operations["get_v1_image-store_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/image-store/settings": {
         parameters: {
             query?: never;
@@ -1419,6 +1436,23 @@ export interface paths {
         /** Configure the Cloudflare R2 / S3 destination and default retention for Rudder Images */
         put: operations["put_v1_image-store_settings"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/image-store/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the Rudder Image bucket by writing, reading, and deleting a probe object */
+        post: operations["post_v1_image-store_test"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3631,6 +3665,28 @@ export interface components {
             id: string;
             status: string;
         };
+        BuildTotals: {
+            /**
+             * Format: int64
+             * @description Builds the panel ran from Git in the last 30 days.
+             */
+            builds_30d: number;
+            /** Format: int64 */
+            failed_30d: number;
+            /** Format: int64 */
+            image_deploy_failures_30d: number;
+            /**
+             * Format: int64
+             * @description Deployments rolled out from a Rudder Image in the last 30 days.
+             */
+            image_deploys_30d: number;
+            /** Format: int64 */
+            queued: number;
+            /** Format: int64 */
+            running: number;
+            /** Format: int64 */
+            succeeded_30d: number;
+        };
         BuildsCancelled: {
             /**
              * Format: int64
@@ -4401,6 +4457,77 @@ export interface components {
             /** Format: int64 */
             swap_total_bytes: number;
         };
+        ImageClient: {
+            /** @description `browser` or `device_code`. */
+            auth_method: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            name: string;
+            scopes: string[];
+            user_email: string;
+        };
+        ImageDay: {
+            /** Format: int64 */
+            builds: number;
+            /** Format: int64 */
+            bytes: number;
+            /** Format: date */
+            day: string;
+            /** Format: int64 */
+            failed_builds: number;
+            /** Format: int64 */
+            image_deploys: number;
+            /** Format: int64 */
+            pushes: number;
+        };
+        ImageServiceStat: {
+            auto_deploy: boolean;
+            /** Format: int64 */
+            images: number;
+            /** Format: date-time */
+            last_push_at?: string | null;
+            last_tag?: string | null;
+            /** @description `project/environment/service`. */
+            path: string;
+            /** Format: int64 */
+            r2_bytes: number;
+            /** Format: int64 */
+            r2_images: number;
+            /** Format: uuid */
+            service_id: string;
+        };
+        ImageSetupStep: {
+            detail: string;
+            /** @description `bucket`, `retention`, `client`, `first_push`, or `auto_deploy`. */
+            key: string;
+            /** @description `ok`, `todo`, or `optional` (not done, but nothing is broken). */
+            state: string;
+        };
+        ImageStoreDestination: {
+            bucket: string;
+            endpoint?: string | null;
+            /** Format: uuid */
+            id: string;
+            name: string;
+            region: string;
+        };
+        ImageStoreOverview: {
+            builds: components["schemas"]["BuildTotals"];
+            clients: components["schemas"]["ImageClient"][];
+            daily: components["schemas"]["ImageDay"][];
+            destination?: components["schemas"]["ImageStoreDestination"] | null;
+            recent_pushes: components["schemas"]["RecentImagePush"][];
+            services: components["schemas"]["ImageServiceStat"][];
+            settings: components["schemas"]["ImageStoreSettingsView"];
+            setup: components["schemas"]["ImageSetupStep"][];
+            totals: components["schemas"]["ImageTotals"];
+        };
         ImageStoreSettingsView: {
             bucket?: string | null;
             /** Format: uuid */
@@ -4413,6 +4540,38 @@ export interface components {
             r2_keep_days?: number | null;
             /** Format: date-time */
             updated_at: string;
+        };
+        ImageTotals: {
+            /**
+             * Format: int64
+             * @description Versions on record, on R2 or already pruned.
+             */
+            images: number;
+            /**
+             * Format: int64
+             * @description Versions pruned from the bucket by retention.
+             */
+            pruned_images: number;
+            /** Format: int64 */
+            pushed_bytes_30d: number;
+            /** Format: int64 */
+            pushes_24h: number;
+            /** Format: int64 */
+            pushes_30d: number;
+            /** Format: int64 */
+            pushes_7d: number;
+            /**
+             * Format: int64
+             * @description Bytes the bucket holds for Rudder Images.
+             */
+            r2_bytes: number;
+            /**
+             * Format: int64
+             * @description Versions that can still be deployed from the bucket.
+             */
+            r2_images: number;
+            /** Format: int64 */
+            services: number;
         };
         ImportEnv: {
             /** @description Only report what would change; save nothing. */
@@ -4762,6 +4921,22 @@ export interface components {
             /** @description True when every required check passes, so the installer may close the ports. */
             ready: boolean;
             skipped: components["schemas"]["SkippedHost"][];
+        };
+        RecentImagePush: {
+            compression: string;
+            /** Format: date-time */
+            created_at: string;
+            git_sha?: string | null;
+            /** Format: uuid */
+            id: string;
+            path: string;
+            pushed_by?: string | null;
+            r2_present: boolean;
+            /** Format: uuid */
+            service_id: string;
+            /** Format: int64 */
+            size_bytes: number;
+            tag: string;
         };
         RecoveryCodes: {
             recovery_codes: string[];
@@ -7967,6 +8142,26 @@ export interface operations {
             };
         };
     };
+    "get_v1_image-store_overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rudder Image dashboard: setup status, push and build statistics, per-service usage, recent pushes, and signed-in CLI clients */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageStoreOverview"];
+                };
+            };
+        };
+    };
     "get_v1_image-store_settings": {
         parameters: {
             query?: never;
@@ -8007,6 +8202,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageStoreSettingsView"];
+                };
+            };
+        };
+    };
+    "post_v1_image-store_test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Check the Rudder Image bucket by writing, reading, and deleting a probe object */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
                 };
             };
         };
