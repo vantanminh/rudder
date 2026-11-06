@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-06
+
 ### Added
 - **A Rudder Image page to manage images on your servers.** **S3 → Rudder Image** shows whether the bucket, retention, CLI client, and first push are set up, checks the bucket with a live write/read/delete test, charts pushes, builds, and image deploys over 30 days, lists usage per service and the latest pushes, and shows every `rudder login` client. You can deploy, free bucket space for, or delete any version, and set the bucket and retention (by count and by days) from the same page.
 - **Rudder Image status on the Overview page.** A small card shows the bucket, signed-in clients, versions on R2, recent pushes, and how many setup steps are left.
