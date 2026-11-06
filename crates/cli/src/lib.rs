@@ -864,7 +864,10 @@ async fn images_cmd(
                 .await?;
             let id = remote
                 .as_array()
-                .and_then(|list| list.iter().find(|r| r["tag"].as_str() == Some(tag.as_str())))
+                .and_then(|list| {
+                    list.iter()
+                        .find(|r| r["tag"].as_str() == Some(tag.as_str()))
+                })
                 .and_then(|r| r["id"].as_str())
                 .map(str::to_owned)
                 .with_context(|| format!("no version '{tag}' on record for {}", service.path()))?;
@@ -884,7 +887,10 @@ async fn images_cmd(
                     "Freed {tag} from Cloudflare R2 (history kept; local copy untouched)"
                 )?;
             } else {
-                writeln!(out, "Removed {tag} from Cloudflare R2 and the version history")?;
+                writeln!(
+                    out,
+                    "Removed {tag} from Cloudflare R2 and the version history"
+                )?;
             }
             Ok(())
         }
@@ -1115,7 +1121,10 @@ async fn status(api: &Api, args: Vec<String>, out: &mut (dyn Write + Send)) -> a
             "  Bucket:      {name} ({})",
             overview["destination"]["bucket"].as_str().unwrap_or("?")
         )?,
-        None => writeln!(out, "  Bucket:      not set (panel: S3 > Rudder Image > Setup)")?,
+        None => writeln!(
+            out,
+            "  Bucket:      not set (panel: S3 > Rudder Image > Setup)"
+        )?,
     }
     if check {
         if overview["destination"].is_null() {
