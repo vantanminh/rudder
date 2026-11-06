@@ -318,4 +318,41 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
     assert_eq!(re_pushed.status, StatusCode::CREATED);
     assert_eq!(re_pushed.body["image"]["r2_present"], true);
     assert_eq!(re_pushed.body["pruned_tags"][0], "v2");
+
+    // The dashboard overview reflects setup, totals, and the per-service rollup.
+    let overview = call(
+        &router,
+        "GET",
+        "/api/v1/image-store/overview",
+        session,
+        None,
+    )
+    .await;
+    assert_eq!(overview.status, StatusCode::OK, "{}", overview.body);
+    assert_eq!(overview.body["destination"]["name"], "cloudflare-r2");
+    assert_eq!(overview.body["totals"]["images"], 3);
+    assert_eq!(overview.body["totals"]["r2_images"], 2);
+    assert_eq!(overview.body["totals"]["pruned_images"], 1);
+    assert_eq!(overview.body["totals"]["pushes_24h"], 3);
+    assert_eq!(overview.body["services"][0]["path"], "acme/prod/api");
+    assert_eq!(overview.body["recent_pushes"].as_array().unwrap().len(), 3);
+    assert_eq!(overview.body["daily"].as_array().unwrap().len(), 30);
+    let step = |key: &str| {
+        overview.body["setup"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["key"] == key)
+            .unwrap()["state"]
+            .clone()
+    };
+    assert_eq!(step("bucket"), "ok");
+    assert_eq!(step("retention"), "ok");
+    assert_eq!(step("first_push"), "ok");
+    assert_eq!(step("client"), "todo");
+    assert_eq!(step("auto_deploy"), "optional");
+
+    let probe = call(&router, "POST", "/api/v1/image-store/test", session, None).await;
+    assert_eq!(probe.status, StatusCode::OK, "{}", probe.body);
+    assert_eq!(probe.body["ok"], true, "{}", probe.body);
 }

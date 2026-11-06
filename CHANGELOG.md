@@ -8,6 +8,9 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Rudder Image overview in the API and for AI agents.** `GET /api/v1/image-store/overview` returns setup status, push and build counts for the last 30 days, per-service usage on the bucket, recent pushes, and the command-line clients that signed in; `POST /api/v1/image-store/test` checks the bucket by writing, reading, and deleting a probe object. Both are available as MCP tools in the `source` scope.
+
 ## [0.7.0] - 2026-11-05
 
 ### Added

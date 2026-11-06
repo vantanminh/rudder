@@ -155,7 +155,9 @@ pub fn router() -> axum::Router<AppState> {
         )
 }
 
-async fn load_store_settings(pool: &sqlx::PgPool) -> Result<ImageStoreSettingsView, ApiError> {
+pub(super) async fn load_store_settings(
+    pool: &sqlx::PgPool,
+) -> Result<ImageStoreSettingsView, ApiError> {
     sqlx::query_as::<_, ImageStoreSettingsView>(
         r#"
         SELECT s.destination_id,
