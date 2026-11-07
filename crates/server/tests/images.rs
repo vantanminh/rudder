@@ -424,7 +424,7 @@ async fn compose_service_accepts_image_push(pool: PgPool) {
     )
     .await;
     assert_eq!(stack.status, StatusCode::CREATED, "{}", stack.body);
-    let stack_id = stack.body["id"].as_str().unwrap().to_owned();
+    let stack_id = stack.body["service"]["id"].as_str().unwrap().to_owned();
 
     let dest = call(
         &router,
