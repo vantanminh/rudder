@@ -8,6 +8,15 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **BuildKit, automatic `GIT_SHA` and `BUILD_TIME` build args, `--platform`, `--no-cache`, `--progress`, and build context warnings in `rudder build`.** `rudder build` now enables BuildKit (`DOCKER_BUILDKIT=1`), automatically passes `GIT_SHA` and `BUILD_TIME` as `--build-arg`s (plus custom `build_args` from `rudder.toml` or `--build-arg KEY=VAL`), supports `--platform`, `--no-cache`, and `--progress`, reports the build context size sent to Docker (warning when it exceeds 200 MiB), falls back cleanly with a notice outside a Git repository, and prints a complete build summary.
+- **Upload progress, automatic retries, duplicate-upload skipping, and Cloudflare Access Service Token support in `rudder push`.** `rudder push` now skips uploading when the exact tag and SHA-256 digest are already present in Cloudflare R2, reports upload progress with automatic retry on transient network or `502`/`503`/`504` errors, prints a full summary with next steps, and supports `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` when the panel is behind Cloudflare Access.
+
+### Fixed
+- **Active deployments are never pruned or deleted from local storage or Cloudflare R2.** `local_keep_count` and `r2_keep_count` retention pruning now protect the image currently deployed on the service in addition to the newest build, and `rudder images remove` refuses to delete an image version that is currently deployed.
+- **`rudder login`, `rudder push`, and all CLI commands work when the panel is behind Cloudflare Access.** When **Let AI agents and API clients through** is enabled under **Security → Cloudflare**, the CLI (`--browser`, `--device`, and API token modes, plus `rudder push` and `rudder deploy`) now automatically routes API requests through the bypassed `/mcp/api/v1` path, and the panel's Cloudflare Access guard accepts CLI handshake and `Bearer rdr_...` requests while still blocking browser cookie requests that lack a valid Cloudflare Access token.
+- **Subcommand `--help` flags in the `rudder` CLI.** `rudder build --help`, `rudder push --help`, `rudder login --help`, and all other subcommands now print usage instead of failing with `unknown option --help`.
+
 ## [0.8.0] - 2026-11-06
 
 ### Added

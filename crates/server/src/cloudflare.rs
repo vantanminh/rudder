@@ -1051,12 +1051,13 @@ impl Runtime {
         pool: &PgPool,
         host: &str,
         path: &str,
+        cli_or_api_client: bool,
         token: Option<&str>,
     ) -> Verdict {
         let Some((issuer, audience, bypass)) = self.guard_for(pool, host).await else {
             return Verdict::NotGuarded;
         };
-        if bypass && bypassed(path) {
+        if bypass && (bypassed(path) || cli_or_api_client) {
             return Verdict::NotGuarded;
         }
         let Some(token) = token else {
@@ -1088,13 +1089,62 @@ pub enum Verdict {
     Unavailable,
 }
 
+fn has_rudder_bearer_token(headers: &axum::http::HeaderMap) -> bool {
+    let Some(raw) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    else {
+        return false;
+    };
+    raw.strip_prefix("Bearer ")
+        .or_else(|| raw.strip_prefix("bearer "))
+        .map(str::trim)
+        .is_some_and(|token| token.starts_with("rdr_"))
+}
+
+/// Whether `path` (after stripping any `/mcp` CLI tunnel prefix) is a legitimate CLI/API
+/// request that may pass through when `agent_bypass` ("Let AI agents and API clients through") is enabled:
+/// - `POST /api/v1/cli/auth/start` and `POST /api/v1/cli/auth/poll` (CLI login handshake; approval still happens in the browser under Access)
+/// - Any `/api/v1/*` request authenticated with a `Bearer rdr_...` API/CLI token (not a browser cookie).
+pub fn is_cli_or_api_client_request(path: &str, headers: &axum::http::HeaderMap) -> bool {
+    if path == "/api/v1/cli/auth/start" || path == "/api/v1/cli/auth/poll" {
+        return true;
+    }
+    path.starts_with("/api/v1/") && has_rudder_bearer_token(headers)
+}
+
+/// Rewrite `/mcp/api/v1/...` (used by `rudder` CLI to traverse Cloudflare's `/mcp` edge bypass
+/// rule when Cloudflare Access is enabled) to `/api/v1/...`, stripping any `Cookie` header so
+/// browser sessions can never use the `/mcp/api/v1` prefix.
+fn rewrite_cli_bypass_uri(request: &mut axum::extract::Request) {
+    let path = request.uri().path();
+    let is_mcp_api = path == "/mcp/api/v1" || path.starts_with("/mcp/api/v1/");
+    if !is_mcp_api {
+        return;
+    }
+    request.headers_mut().remove(axum::http::header::COOKIE);
+    let new_path_and_query = request
+        .uri()
+        .path_and_query()
+        .and_then(|pq| pq.as_str().strip_prefix("/mcp"))
+        .unwrap_or("/api/v1");
+    if let Ok(parsed) = new_path_and_query.parse::<axum::http::uri::PathAndQuery>() {
+        let mut parts = request.uri().clone().into_parts();
+        parts.path_and_query = Some(parsed);
+        if let Ok(new_uri) = axum::http::Uri::from_parts(parts) {
+            *request.uri_mut() = new_uri;
+        }
+    }
+}
+
 /// Rejects requests for the panel domain that did not come through Cloudflare Access.
 pub async fn enforce_access(
     axum::extract::State(state): axum::extract::State<AppState>,
-    request: axum::extract::Request,
+    mut request: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::response::IntoResponse;
+    rewrite_cli_bypass_uri(&mut request);
     let host = request
         .headers()
         .get(axum::http::header::HOST)
@@ -1104,6 +1154,11 @@ pub async fn enforce_access(
     if host.is_empty() {
         return next.run(request).await;
     }
+    let cli_or_api_client =
+        is_cli_or_api_client_request(request.uri().path(), request.headers());
+    if cli_or_api_client {
+        request.headers_mut().remove(axum::http::header::COOKIE);
+    }
     let token = request
         .headers()
         .get("cf-access-jwt-assertion")
@@ -1111,7 +1166,13 @@ pub async fn enforce_access(
         .map(str::to_owned);
     let verdict = state
         .cloudflare
-        .check(&state.pool, &host, request.uri().path(), token.as_deref())
+        .check(
+            &state.pool,
+            &host,
+            request.uri().path(),
+            cli_or_api_client,
+            token.as_deref(),
+        )
         .await;
     match verdict {
         Verdict::NotGuarded | Verdict::Allowed => next.run(request).await,
@@ -1161,6 +1222,27 @@ mod tests {
         assert!(!bypassed("/mcpx"));
         assert!(!bypassed("/api/v1/users"));
         assert!(!bypassed("/oauthish"));
+    }
+
+    #[test]
+    fn cli_and_bearer_api_requests_are_identified() {
+        let empty = axum::http::HeaderMap::new();
+        assert!(is_cli_or_api_client_request("/api/v1/cli/auth/start", &empty));
+        assert!(is_cli_or_api_client_request("/api/v1/cli/auth/poll", &empty));
+        assert!(!is_cli_or_api_client_request("/api/v1/cli/auth/approve", &empty));
+        assert!(!is_cli_or_api_client_request("/api/v1/me", &empty));
+
+        let mut bearer = axum::http::HeaderMap::new();
+        bearer.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer rdr_0123456789abcdef".parse().unwrap(),
+        );
+        assert!(is_cli_or_api_client_request("/api/v1/me", &bearer));
+        assert!(is_cli_or_api_client_request("/api/v1/services", &bearer));
+        assert!(is_cli_or_api_client_request(
+            "/api/v1/services/abc/images",
+            &bearer
+        ));
     }
 
     #[test]

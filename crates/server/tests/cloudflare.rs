@@ -809,7 +809,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     assert_eq!(enforced.status, StatusCode::OK, "{}", enforced.body);
     assert_eq!(enforced.body["access_enforced"], true);
     // The panel domain now refuses requests without an Access token, except the
-    // agent paths; other hostnames (the raw address, localhost) are untouched.
+    // agent paths and CLI/Bearer API paths; other hostnames (the raw address, localhost) are untouched.
     let blocked = call_with(
         &app,
         "GET",
@@ -820,6 +820,26 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
     )
     .await;
     assert_eq!(blocked.status, StatusCode::FORBIDDEN);
+    let blocked_mcp_cookie = call_with(
+        &app,
+        "GET",
+        "/mcp/api/v1/me",
+        Some(&session),
+        None,
+        Some("panel.example.com"),
+    )
+    .await;
+    assert_eq!(blocked_mcp_cookie.status, StatusCode::FORBIDDEN);
+    let cli_start = call_with(
+        &app,
+        "POST",
+        "/mcp/api/v1/cli/auth/start",
+        None,
+        Some(json!({ "method": "device_code", "client_name": "rudder-cli" })),
+        Some("panel.example.com"),
+    )
+    .await;
+    assert_eq!(cli_start.status, StatusCode::OK, "{}", cli_start.body);
     let exempt = call_with(
         &app,
         "GET",

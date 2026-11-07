@@ -12,10 +12,12 @@ pub mod image;
 pub mod project;
 pub mod update;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context as _};
 use serde::Deserialize;
@@ -28,7 +30,7 @@ Usage:
   rudder login --url <panel URL> [--browser | --device]   sign in with API token, browser, or 8-char device code
   rudder logout                                           forget the saved token
   rudder init [<service>] [--file rudder.toml]            create a rudder.toml project config
-  rudder build [<service>] [--tag TAG] [--skip-checks]    run local CI checks, build Docker image & save locally
+  rudder build [<service>] [--tag TAG] [--platform P] [--no-cache] [--progress M] [--build-arg K=V] [--skip-checks]
   rudder push [TAG] [--service S] [--deploy]              upload a local image archive to Cloudflare R2
   rudder deploy [<service>] [--image TAG] [--build]       deploy from R2 (or check+build+push+deploy with --build)
   rudder images [<service>] [list | prune --keep N | rollback TAG | remove TAG [--r2-only]]
@@ -92,11 +94,30 @@ pub async fn run(
             Ok(())
         }
         Some("backup") => match args.next().as_deref() {
-            Some("decrypt") => decrypt::run(decrypt::parse(args)?),
+            Some("decrypt") => {
+                let rest: Vec<String> = args.collect();
+                if rest.iter().any(|a| a == "--help" || a == "-h") {
+                    writeln!(
+                        out,
+                        "Usage: rudder backup decrypt [--in FILE] [--out FILE]\n\nDecrypt a client-side encrypted Rudder backup archive.\nSet RUDDER_BACKUP_PASSPHRASE in the environment (or enter it on stdin when --in is used)."
+                    )?;
+                    return Ok(());
+                }
+                decrypt::run(decrypt::parse(rest.into_iter())?)
+            }
+            Some("--help" | "-h") => {
+                writeln!(out, "Usage: rudder backup decrypt [--in FILE] [--out FILE]")?;
+                Ok(())
+            }
             _ => bail!("usage: rudder backup decrypt [--in FILE] [--out FILE]"),
         },
         Some("login") => login(args.collect(), ctx, out).await,
         Some("logout") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "Usage: rudder logout\n\nRemove the saved panel URL and API token from {}.", ctx.config_path.display())?;
+                return Ok(());
+            }
             match std::fs::remove_file(&ctx.config_path) {
                 Ok(()) => writeln!(out, "Removed {}", ctx.config_path.display())?,
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -107,27 +128,254 @@ pub async fn run(
             Ok(())
         }
         Some("init") => init_project(args.collect(), out),
-        Some("build") => build_cmd(args.collect(), ctx, out),
-        Some("push") => push_cmd(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
-        Some("images") => images_cmd(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
+        Some("build") => build_cmd(args.collect(), ctx, out).await,
+        Some("push") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                print_push_help(out)?;
+                return Ok(());
+            }
+            push_cmd(&Api::from_context(ctx)?, rest, ctx, out).await
+        }
+        Some("images") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                print_images_help(out)?;
+                return Ok(());
+            }
+            images_cmd(&Api::from_context(ctx)?, rest, ctx, out).await
+        }
         Some("update" | "self-update") => update::run(args.collect(), out).await,
-        Some("services") => services(&Api::from_context(ctx)?, out).await,
-        Some("whoami") => whoami(&Api::from_context(ctx)?, out).await,
-        Some("status") => status(&Api::from_context(ctx)?, args.collect(), out).await,
-        Some("deploy") => deploy(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
-        Some("logs") => logs(&Api::from_context(ctx)?, args.collect(), ctx, out).await,
+        Some("services") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "Usage: rudder services\n\nList all services across projects and environments.")?;
+                return Ok(());
+            }
+            services(&Api::from_context(ctx)?, out).await
+        }
+        Some("whoami") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "Usage: rudder whoami\n\nShow the panel URL, user email, and role for the active CLI session.")?;
+                return Ok(());
+            }
+            whoami(&Api::from_context(ctx)?, out).await
+        }
+        Some("status") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "Usage: rudder status [--check]\n\nShow Rudder Image store configuration, R2 version counts, push/build statistics, and signed-in clients.\nPass --check to run a live write/read/delete probe against the R2 bucket.")?;
+                return Ok(());
+            }
+            status(&Api::from_context(ctx)?, rest, out).await
+        }
+        Some("deploy") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                print_deploy_help(out)?;
+                return Ok(());
+            }
+            deploy(&Api::from_context(ctx)?, rest, ctx, out).await
+        }
+        Some("logs") => {
+            let rest: Vec<String> = args.collect();
+            if rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "Usage: rudder logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]")?;
+                return Ok(());
+            }
+            logs(&Api::from_context(ctx)?, rest, ctx, out).await
+        }
         Some("cache") => match args.next().as_deref() {
-            Some("purge") => purge(&Api::from_context(ctx)?, args.collect(), out).await,
+            Some("purge") => {
+                let rest: Vec<String> = args.collect();
+                if rest.iter().any(|a| a == "--help" || a == "-h") {
+                    writeln!(out, "Usage: rudder cache purge <service> (--all | --path P... | --prefix P) [--domain ID]")?;
+                    return Ok(());
+                }
+                purge(&Api::from_context(ctx)?, rest, out).await
+            }
             _ => bail!("usage: rudder cache purge <service> (--all | --path P... | --prefix P)"),
         },
         Some(other) => bail!("unknown command '{other}'; see rudder --help"),
     }
 }
 
+fn print_build_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    writeln!(
+        out,
+        "\
+Usage: rudder build [<service>] [options]
+
+Run local CI checks, build the Docker image with BuildKit, auto-inject GIT_SHA and BUILD_TIME,
+and save a compressed archive to the local Rudder Image store (~/.config/rudder/images/).
+
+Options:
+  -s, --service <SERVICE>     Target service (id, name, project/name, or project/env/name)
+  -t, --tag <TAG>             Image tag (default: YYYYMMDD-HHMMSS-<short-git-sha>)
+      --dockerfile <PATH>     Dockerfile path (default: from rudder.toml or Dockerfile)
+      --context <DIR>         Build context directory (default: from rudder.toml or .)
+      --platform <PLATFORM>   Target platform, e.g. linux/amd64 or linux/arm64
+      --no-cache              Do not use Docker layer cache when building
+      --progress <MODE>       BuildKit progress output: auto, plain, or tty
+      --build-arg <KEY=VAL>   Additional Docker build-arg (repeatable; GIT_SHA & BUILD_TIME are passed automatically)
+      --check <CMD>           Local check command to run before building (repeatable)
+      --skip-checks           Skip local CI checks configured in rudder.toml
+      --local-keep <N>        Number of local image archives to retain
+  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -h, --help                  Print this help message"
+    )?;
+    Ok(())
+}
+
+fn print_push_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    writeln!(
+        out,
+        "\
+Usage: rudder push [TAG] [options]
+
+Upload a locally built image archive to the Rudder Image store (Cloudflare R2) via the panel.
+Verifies the SHA-256 digest on upload and skips uploading if the exact tag + digest is already in R2.
+
+Options:
+  -s, --service <SERVICE>     Target service (default: from rudder.toml)
+  -t, --tag <TAG>             Tag to push (default: most recently built local image)
+      --deploy                Deploy the image immediately after upload completes
+      --no-deploy             Store the image in R2 without deploying, even if auto-deploy is enabled
+      --r2-keep <N>           Retain the newest N versions in R2 (never prunes the deployed image)
+  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -h, --help                  Print this help message"
+    )?;
+    Ok(())
+}
+
+fn print_deploy_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    writeln!(
+        out,
+        "\
+Usage: rudder deploy [<service>] [options]
+
+Deploy a service from Cloudflare R2, a container registry image, a Git build, or a compose stack.
+
+Options:
+      --image <TAG|IMAGE>     Tag in R2 (or full registry image reference) to deploy
+      --build                 Run `rudder build` + `rudder push --deploy` in one step
+      --no-build              Skip building locally even if `deploy_build = true` in rudder.toml
+      --skip-checks           Skip local CI checks when --build is active
+      --platform <PLATFORM>   Target platform when --build is active (e.g. linux/amd64)
+      --no-cache              Disable Docker cache when --build is active
+      --progress <MODE>       BuildKit progress mode (auto, plain, tty) when --build is active
+      --build-arg <KEY=VAL>   Pass extra --build-arg when --build is active (repeatable)
+      --no-wait               Return as soon as the deployment is queued
+      --timeout <SECONDS>     Maximum time to wait for deployment completion (default: 1800)
+  -f, --file <PATH>           Path to project config file (default: rudder.toml)
+  -h, --help                  Print this help message"
+    )?;
+    Ok(())
+}
+
+fn print_images_help(out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+    writeln!(
+        out,
+        "\
+Usage:
+  rudder images [<service>] [list]
+  rudder images [<service>] prune --keep <N>
+  rudder images [<service>] rollback <TAG>
+  rudder images [<service>] remove <TAG> [--r2-only]
+
+Manage local and Cloudflare R2 image versions for a service."
+    )?;
+    Ok(())
+}
+
+fn build_http_client(timeout: Duration) -> anyhow::Result<reqwest::Client> {
+    let policy = reqwest::redirect::Policy::custom(|attempt| {
+        let url = attempt.url();
+        let host = url.host_str().unwrap_or_default();
+        if url.path().starts_with("/cdn-cgi/access/login")
+            || host.ends_with(".cloudflareaccess.com")
+        {
+            attempt.stop()
+        } else if attempt.previous().len() >= 5 {
+            attempt.error("too many redirects")
+        } else {
+            attempt.follow()
+        }
+    });
+    Ok(reqwest::Client::builder()
+        .user_agent(format!("rudder-cli/{}", rudder_core::VERSION))
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(timeout)
+        .redirect(policy)
+        .build()?)
+}
+
+fn apply_cf_access_headers(mut req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    if let (Ok(id), Ok(secret)) = (
+        std::env::var("CF_ACCESS_CLIENT_ID"),
+        std::env::var("CF_ACCESS_CLIENT_SECRET"),
+    ) {
+        if !id.is_empty() && !secret.is_empty() {
+            req = req
+                .header("CF-Access-Client-Id", id)
+                .header("CF-Access-Client-Secret", secret);
+        }
+    }
+    req
+}
+
+fn is_cloudflare_access_interception(
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    bytes: &[u8],
+) -> bool {
+    let location = headers
+        .get(reqwest::header::LOCATION)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let www_auth = headers
+        .get(reqwest::header::WWW_AUTHENTICATE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let content_type = headers
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    let body_preview = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]);
+    let _ = status;
+
+    location.contains("/cdn-cgi/access/login")
+        || location.contains("cloudflareaccess.com")
+        || www_auth.contains("Cloudflare-Access")
+        || (content_type.contains("text/html") && body_preview.contains("cloudflareaccess.com"))
+}
+
+fn check_cloudflare_access_interception(
+    base: &str,
+    path: &str,
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    bytes: &[u8],
+) -> anyhow::Result<()> {
+    if is_cloudflare_access_interception(status, headers, bytes) {
+        let location = headers
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        bail!(
+            "Cloudflare Access intercepted `{base}{path}` ({status} -> {location}).\n\
+             Ensure 'Let AI agents and API clients through' is enabled under Security -> Cloudflare in the panel, or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`."
+        );
+    }
+    Ok(())
+}
+
 struct Api {
     http: reqwest::Client,
     base: String,
     token: String,
+    use_mcp_prefix: std::sync::atomic::AtomicBool,
 }
 
 impl Api {
@@ -136,13 +384,10 @@ impl Api {
             bail!("that is not a Rudder API token (they start with rdr_)");
         }
         Ok(Self {
-            http: reqwest::Client::builder()
-                .user_agent(format!("rudder-cli/{}", rudder_core::VERSION))
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(900))
-                .build()?,
+            http: build_http_client(Duration::from_secs(900))?,
             base: config::normalize_url(base)?,
             token: token.to_owned(),
+            use_mcp_prefix: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -161,8 +406,17 @@ impl Api {
         Self::new(&url, &token)
     }
 
+    fn effective_path(&self, path: &str) -> String {
+        if self.use_mcp_prefix.load(Ordering::Relaxed) && path.starts_with("/api/v1") {
+            format!("/mcp{path}")
+        } else {
+            path.to_owned()
+        }
+    }
+
     fn url(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<url::Url> {
-        let mut url = url::Url::parse(&format!("{}{path}", self.base))?;
+        let eff = self.effective_path(path);
+        let mut url = url::Url::parse(&format!("{}{eff}", self.base))?;
         if !query.is_empty() {
             url.query_pairs_mut().extend_pairs(query);
         }
@@ -176,33 +430,82 @@ impl Api {
         query: &[(&str, String)],
         body: Option<Value>,
     ) -> anyhow::Result<Value> {
-        let url = self.url(path, query)?;
-        let mut request = self
-            .http
-            .request(method.clone(), url)
-            .bearer_auth(&self.token);
-        if let Some(body) = body {
-            request = request.json(&body);
+        for pass in 0..2 {
+            let url = self.url(path, query)?;
+            let mut request = apply_cf_access_headers(
+                self.http
+                    .request(method.clone(), url)
+                    .bearer_auth(&self.token),
+            );
+            if let Some(body) = &body {
+                request = request.json(body);
+            }
+            let response = request
+                .send()
+                .await
+                .with_context(|| format!("{method} {}{path}", self.base))?;
+            let status = response.status();
+            let headers = response.headers().clone();
+            let bytes = response.bytes().await?;
+
+            if pass == 0
+                && !self.use_mcp_prefix.load(Ordering::Relaxed)
+                && path.starts_with("/api/v1")
+                && is_cloudflare_access_interception(status, &headers, &bytes)
+            {
+                self.use_mcp_prefix.store(true, Ordering::Relaxed);
+                continue;
+            }
+            check_cloudflare_access_interception(&self.base, path, status, &headers, &bytes)?;
+
+            if status.is_redirection() {
+                let loc = headers
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("?");
+                bail!(
+                    "unexpected HTTP redirect ({status} -> {loc}) from {}{path}; check the panel URL",
+                    self.base
+                );
+            }
+
+            let value: Value = match serde_json::from_slice(&bytes) {
+                Ok(v) => v,
+                Err(_) if bytes.is_empty() => Value::Null,
+                Err(_) if status.is_success() => {
+                    let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(200)]);
+                    if self.use_mcp_prefix.load(Ordering::Relaxed)
+                        && preview.contains("<!doctype html")
+                    {
+                        bail!(
+                            "Cloudflare Access intercepted `{}{path}`, and the panel at {} is running an older Rudder server version that does not yet route CLI calls through `/mcp/api/v1`.\n\
+                             Update the Rudder panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`.",
+                            self.base,
+                            self.base
+                        );
+                    }
+                    bail!(
+                        "expected JSON from {}{path} ({status}), but received non-JSON response: {}",
+                        self.base,
+                        preview.trim()
+                    );
+                }
+                Err(_) => Value::Null,
+            };
+            if status.is_success() {
+                return Ok(value);
+            }
+            let message = value["error"]["message"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| String::from_utf8_lossy(&bytes).trim().to_owned());
+            match status.as_u16() {
+                401 => bail!("the panel rejected the token: {message}"),
+                403 => bail!("not allowed: {message}"),
+                _ => bail!("{message} ({status})"),
+            }
         }
-        let response = request
-            .send()
-            .await
-            .with_context(|| format!("{method} {}{path}", self.base))?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
-        let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-        if status.is_success() {
-            return Ok(value);
-        }
-        let message = value["error"]["message"]
-            .as_str()
-            .map(str::to_owned)
-            .unwrap_or_else(|| String::from_utf8_lossy(&bytes).trim().to_owned());
-        match status.as_u16() {
-            401 => bail!("the panel rejected the token: {message}"),
-            403 => bail!("not allowed: {message}"),
-            _ => bail!("{message} ({status})"),
-        }
+        unreachable!()
     }
 
     async fn get(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
@@ -223,37 +526,130 @@ impl Api {
         path: &str,
         query: &[(&str, String)],
         file_path: &Path,
+        out: &mut (dyn Write + Send),
     ) -> anyhow::Result<Value> {
-        let url = self.url(path, query)?;
-        let file = tokio::fs::File::open(file_path)
-            .await
-            .with_context(|| format!("open {}", file_path.display()))?;
-        let stream = ReaderStream::new(file);
-        let body = reqwest::Body::wrap_stream(stream);
-        let response = self
-            .http
-            .post(url)
-            .bearer_auth(&self.token)
-            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
-            .body(body)
-            .send()
-            .await
-            .with_context(|| format!("POST {}{path}", self.base))?;
-        let status = response.status();
-        let bytes = response.bytes().await?;
-        let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-        if status.is_success() {
-            return Ok(value);
+        let total_bytes = std::fs::metadata(file_path)
+            .with_context(|| format!("stat {}", file_path.display()))?
+            .len();
+        let max_attempts = 3u32;
+
+        for attempt in 1..=max_attempts {
+            if attempt > 1 {
+                let backoff = Duration::from_millis(500 * u64::from(attempt - 1));
+                writeln!(
+                    out,
+                    "==> Retrying upload (attempt {attempt}/{max_attempts}) after {:.1}s...",
+                    backoff.as_secs_f64()
+                )?;
+                out.flush()?;
+                tokio::time::sleep(backoff).await;
+            }
+
+            let url = self.url(path, query)?;
+            let file = tokio::fs::File::open(file_path)
+                .await
+                .with_context(|| format!("open {}", file_path.display()))?;
+            let uploaded = Arc::new(AtomicU64::new(0));
+            let reader = ProgressFile {
+                inner: file,
+                uploaded: Arc::clone(&uploaded),
+            };
+            let stream = ReaderStream::new(reader);
+            let body = reqwest::Body::wrap_stream(stream);
+            let request = apply_cf_access_headers(
+                self.http
+                    .post(url)
+                    .bearer_auth(&self.token)
+                    .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+                    .header(reqwest::header::CONTENT_LENGTH, total_bytes),
+            )
+            .body(body);
+
+            let send_res = request.send().await;
+            let sent_bytes = uploaded.load(Ordering::Relaxed);
+            if total_bytes > 0 && sent_bytes > 0 {
+                let pct = ((sent_bytes as f64 / total_bytes as f64) * 100.0).min(100.0);
+                writeln!(
+                    out,
+                    "==> Uploaded {pct:.0}% ({} / {})",
+                    image::format_bytes(sent_bytes),
+                    image::format_bytes(total_bytes)
+                )?;
+                out.flush()?;
+            }
+
+            let response = match send_res {
+                Ok(resp) => resp,
+                Err(err)
+                    if attempt < max_attempts
+                        && (err.is_connect()
+                            || err.is_timeout()
+                            || err.is_request()
+                            || err.is_body()) =>
+                {
+                    writeln!(out, "==> Upload interrupted ({err}); will retry...")?;
+                    continue;
+                }
+                Err(err) => {
+                    return Err(err).with_context(|| format!("POST {}{path}", self.base));
+                }
+            };
+
+            let status = response.status();
+            let headers = response.headers().clone();
+            let bytes = response.bytes().await?;
+            if !self.use_mcp_prefix.load(Ordering::Relaxed)
+                && path.starts_with("/api/v1")
+                && is_cloudflare_access_interception(status, &headers, &bytes)
+            {
+                self.use_mcp_prefix.store(true, Ordering::Relaxed);
+                continue;
+            }
+            check_cloudflare_access_interception(&self.base, path, status, &headers, &bytes)?;
+
+            if matches!(status.as_u16(), 502..=504) && attempt < max_attempts {
+                writeln!(out, "==> Server returned transient {status}; will retry...")?;
+                continue;
+            }
+
+            let value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+            if status.is_success() {
+                return Ok(value);
+            }
+            let message = value["error"]["message"]
+                .as_str()
+                .map(str::to_owned)
+                .unwrap_or_else(|| String::from_utf8_lossy(&bytes).trim().to_owned());
+            match status.as_u16() {
+                401 => bail!("the panel rejected the token: {message}"),
+                403 => bail!("not allowed: {message}"),
+                _ => bail!("{message} ({status})"),
+            }
         }
-        let message = value["error"]["message"]
-            .as_str()
-            .map(str::to_owned)
-            .unwrap_or_else(|| String::from_utf8_lossy(&bytes).trim().to_owned());
-        match status.as_u16() {
-            401 => bail!("the panel rejected the token: {message}"),
-            403 => bail!("not allowed: {message}"),
-            _ => bail!("{message} ({status})"),
+        bail!("upload failed after {max_attempts} attempts")
+    }
+}
+
+struct ProgressFile {
+    inner: tokio::fs::File,
+    uploaded: Arc<AtomicU64>,
+}
+
+impl tokio::io::AsyncRead for ProgressFile {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        let poll = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
+        if let std::task::Poll::Ready(Ok(())) = &poll {
+            let delta = buf.filled().len().saturating_sub(before);
+            if delta > 0 {
+                self.uploaded.fetch_add(delta as u64, Ordering::Relaxed);
+            }
         }
+        poll
     }
 }
 
@@ -275,6 +671,26 @@ async fn login(
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                writeln!(
+                    out,
+                    "\
+Usage: rudder login --url <panel URL> [--browser | --device] [--name <client-name>]
+
+Sign in to a Rudder panel and save the API token to {}.
+
+Modes:
+  (default)     Read an API token (`rdr_...`) from RUDDER_TOKEN or stdin
+  --browser     Open your browser and receive the token via a localhost callback
+  --device      Print an 8-character device code to approve in the panel
+
+Options:
+  --url <URL>   Panel base URL (e.g. https://rudder.example.com)
+  --name <NAME> Client label shown under Rudder Image > Signed-in clients",
+                    ctx.config_path.display()
+                )?;
+                return Ok(());
+            }
             "--url" => url = Some(args.next().context("--url needs a value")?),
             "--browser" => mode = LoginMode::Browser,
             "--device" => mode = LoginMode::DeviceCode,
@@ -301,6 +717,16 @@ async fn login(
 
     let api = Api::new(&base, token.trim())?;
     let me = api.get("/api/v1/me", &[]).await?;
+    let email = me["user"]["email"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            anyhow!(
+                "panel at {} did not return a user profile from /api/v1/me; check the panel URL and Cloudflare Access settings",
+                api.base
+            )
+        })?;
+    let role = me["user"]["role"].as_str().unwrap_or("member");
     config::save(
         &ctx.config_path,
         &config::Saved {
@@ -310,13 +736,57 @@ async fn login(
     )?;
     writeln!(
         out,
-        "Logged in to {} as {} ({}). Saved to {}",
+        "Logged in to {} as {email} ({role}). Saved to {}",
         api.base,
-        me["user"]["email"].as_str().unwrap_or("?"),
-        me["user"]["role"].as_str().unwrap_or("?"),
         ctx.config_path.display()
     )?;
     Ok(())
+}
+
+/// Start a CLI auth session (`device_code` or `browser`), automatically falling back to
+/// `/mcp/api/v1/cli/auth/start` when Cloudflare Access intercepts `/api/v1/cli/auth/start`.
+async fn start_cli_auth_request(
+    http: &reqwest::Client,
+    base: &str,
+    payload: Value,
+    label: &str,
+) -> anyhow::Result<(Value, bool)> {
+    for use_mcp in [false, true] {
+        let path = if use_mcp {
+            "/mcp/api/v1/cli/auth/start"
+        } else {
+            "/api/v1/cli/auth/start"
+        };
+        let resp = apply_cf_access_headers(http.post(format!("{base}{path}")).json(&payload))
+            .send()
+            .await
+            .with_context(|| format!("start {label} login"))?;
+        let status = resp.status();
+        let headers = resp.headers().clone();
+        let bytes = resp.bytes().await?;
+        if !use_mcp && is_cloudflare_access_interception(status, &headers, &bytes) {
+            continue;
+        }
+        check_cloudflare_access_interception(base, path, status, &headers, &bytes)?;
+        if !status.is_success() {
+            bail!("could not start {label} login ({status})");
+        }
+        let started: Value = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(err) => {
+                let preview = String::from_utf8_lossy(&bytes[..bytes.len().min(200)]);
+                if use_mcp && preview.contains("<!doctype html") {
+                    bail!(
+                        "Cloudflare Access intercepted `/api/v1/cli/auth/start` on {base}, and the panel server is running an older version that does not yet route CLI login through `/mcp/api/v1`.\n\
+                         Update the Rudder panel server (System -> Updates), or set `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`."
+                    );
+                }
+                return Err(err).with_context(|| format!("parse {label} login start response"));
+            }
+        };
+        return Ok((started, use_mcp));
+    }
+    unreachable!()
 }
 
 async fn login_via_device(
@@ -325,27 +795,17 @@ async fn login_via_device(
     ctx: &Context,
     out: &mut (dyn Write + Send),
 ) -> anyhow::Result<String> {
-    let http = reqwest::Client::builder()
-        .user_agent(format!("rudder-cli/{}", rudder_core::VERSION))
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()?;
-    let start_resp = http
-        .post(format!("{base}/api/v1/cli/auth/start"))
-        .json(&json!({
+    let http = build_http_client(Duration::from_secs(30))?;
+    let (started, use_mcp) = start_cli_auth_request(
+        &http,
+        base,
+        json!({
             "method": "device_code",
             "client_name": client_name.unwrap_or("rudder-cli"),
-        }))
-        .send()
-        .await
-        .context("start device-code login")?;
-    if !start_resp.status().is_success() {
-        bail!(
-            "could not start device-code login ({})",
-            start_resp.status()
-        );
-    }
-    let started: Value = start_resp.json().await?;
+        }),
+        "device-code",
+    )
+    .await?;
     let request_id = started["request_id"]
         .as_str()
         .context("missing request_id")?
@@ -369,7 +829,7 @@ async fn login_via_device(
     )?;
     out.flush()?;
 
-    poll_for_cli_token(&http, base, &request_id, &poll_secret, ctx.poll).await
+    poll_for_cli_token(&http, base, &request_id, &poll_secret, use_mcp, ctx.poll).await
 }
 
 async fn login_via_browser(
@@ -384,25 +844,18 @@ async fn login_via_browser(
     let port = listener.local_addr()?.port();
     let callback_url = format!("http://127.0.0.1:{port}/callback");
 
-    let http = reqwest::Client::builder()
-        .user_agent(format!("rudder-cli/{}", rudder_core::VERSION))
-        .connect_timeout(Duration::from_secs(10))
-        .timeout(Duration::from_secs(30))
-        .build()?;
-    let start_resp = http
-        .post(format!("{base}/api/v1/cli/auth/start"))
-        .json(&json!({
+    let http = build_http_client(Duration::from_secs(30))?;
+    let (started, use_mcp) = start_cli_auth_request(
+        &http,
+        base,
+        json!({
             "method": "browser",
             "client_name": client_name.unwrap_or("rudder-cli"),
             "callback_url": callback_url,
-        }))
-        .send()
-        .await
-        .context("start browser login")?;
-    if !start_resp.status().is_success() {
-        bail!("could not start browser login ({})", start_resp.status());
-    }
-    let started: Value = start_resp.json().await?;
+        }),
+        "browser",
+    )
+    .await?;
     let request_id = started["request_id"]
         .as_str()
         .context("missing request_id")?
@@ -425,14 +878,14 @@ async fn login_via_browser(
     }
 
     let callback_fut = accept_browser_callback(listener);
-    let poll_fut = poll_for_cli_token(&http, base, &request_id, &poll_secret, ctx.poll);
+    let poll_fut = poll_for_cli_token(&http, base, &request_id, &poll_secret, use_mcp, ctx.poll);
 
     tokio::select! {
         res = callback_fut => {
             if let Ok(token) = res {
                 return Ok(token);
             }
-            poll_for_cli_token(&http, base, &request_id, &poll_secret, ctx.poll).await
+            poll_for_cli_token(&http, base, &request_id, &poll_secret, use_mcp, ctx.poll).await
         }
         res = poll_fut => res,
     }
@@ -468,19 +921,23 @@ async fn poll_for_cli_token(
     base: &str,
     request_id: &str,
     poll_secret: &str,
+    use_mcp: bool,
     interval: Duration,
 ) -> anyhow::Result<String> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(600);
+    let poll_path = if use_mcp {
+        "/mcp/api/v1/cli/auth/poll"
+    } else {
+        "/api/v1/cli/auth/poll"
+    };
     loop {
         tokio::time::sleep(interval).await;
-        let resp = http
-            .post(format!("{base}/api/v1/cli/auth/poll"))
-            .json(&json!({
-                "request_id": request_id,
-                "poll_secret": poll_secret,
-            }))
-            .send()
-            .await?;
+        let resp = apply_cf_access_headers(http.post(format!("{base}{poll_path}")).json(&json!({
+            "request_id": request_id,
+            "poll_secret": poll_secret,
+        })))
+        .send()
+        .await?;
         if !resp.status().is_success() {
             bail!("CLI login poll failed ({})", resp.status());
         }
@@ -529,6 +986,13 @@ fn init_project(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Resu
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                writeln!(
+                    out,
+                    "Usage: rudder init [<service>] [--file rudder.toml] [--r2-keep N] [--local-keep N] [--force]"
+                )?;
+                return Ok(());
+            }
             "--file" | "-f" => {
                 file = PathBuf::from(iter.next().context("--file needs a path")?);
             }
@@ -555,7 +1019,9 @@ fn init_project(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Resu
         service: service.unwrap_or_else(|| "my-project/prod/web".into()),
         dockerfile: "Dockerfile".into(),
         context: ".".into(),
+        platform: None,
         checks: Vec::new(),
+        build_args: BTreeMap::new(),
         r2_keep_count: r2_keep,
         local_keep_count: local_keep,
         deploy_build: false,
@@ -571,11 +1037,55 @@ fn init_project(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Resu
     Ok(())
 }
 
-fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> anyhow::Result<()> {
+pub fn parse_build_arg_kv(raw: &str) -> anyhow::Result<(String, String)> {
+    let Some((k, v)) = raw.split_once('=') else {
+        bail!("--build-arg '{raw}' must be in KEY=VALUE format");
+    };
+    let key = k.trim();
+    if key.is_empty() {
+        bail!("--build-arg '{raw}' has an empty key");
+    }
+    Ok((key.to_owned(), v.to_owned()))
+}
+
+/// Best-effort lookup of the currently deployed image tag for `service_spec` so local pruning
+/// never deletes the active image. Returns `None` when offline or not signed in.
+async fn fetch_deployed_tag_best_effort(ctx: &Context, service_spec: &str) -> Option<String> {
+    let api = Api::from_context(ctx).ok()?;
+    let service = resolve(&api, service_spec).await.ok()?;
+    let detail = api
+        .get(&format!("/api/v1/services/{}", service.id), &[])
+        .await
+        .ok()?;
+    let current = detail["current_image"]
+        .as_str()
+        .or_else(|| detail["spec"]["image"].as_str())?
+        .trim();
+    if current.is_empty() {
+        return None;
+    }
+    Some(
+        current
+            .rsplit_once(':')
+            .map(|(_, tag)| tag)
+            .unwrap_or(current)
+            .to_owned(),
+    )
+}
+
+async fn build_cmd(
+    args: Vec<String>,
+    ctx: &Context,
+    out: &mut (dyn Write + Send),
+) -> anyhow::Result<()> {
     let mut service = None;
     let mut tag = None;
     let mut dockerfile = None;
     let mut context_dir = None;
+    let mut platform = None;
+    let mut no_cache = false;
+    let mut progress = None;
+    let mut cli_build_args = BTreeMap::new();
     let mut checks = Vec::new();
     let mut skip_checks = false;
     let mut local_keep = None;
@@ -584,10 +1094,22 @@ fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                print_build_help(out)?;
+                return Ok(());
+            }
             "--service" | "-s" => service = Some(iter.next().context("--service needs a value")?),
             "--tag" | "-t" => tag = Some(iter.next().context("--tag needs a value")?),
             "--dockerfile" => dockerfile = Some(iter.next().context("--dockerfile needs a path")?),
             "--context" => context_dir = Some(iter.next().context("--context needs a path")?),
+            "--platform" => platform = Some(iter.next().context("--platform needs a value")?),
+            "--no-cache" => no_cache = true,
+            "--progress" => progress = Some(iter.next().context("--progress needs a mode")?),
+            "--build-arg" => {
+                let raw = iter.next().context("--build-arg needs KEY=VALUE")?;
+                let (k, v) = parse_build_arg_kv(&raw)?;
+                cli_build_args.insert(k, v);
+            }
             "--check" => checks.push(iter.next().context("--check needs a command")?),
             "--skip-checks" | "--no-checks" | "--no-check" => skip_checks = true,
             "--local-keep" => {
@@ -597,6 +1119,17 @@ fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> 
                         .parse()
                         .context("--local-keep needs a number")?,
                 )
+            }
+            default_flag if default_flag.starts_with("--progress=") => {
+                progress = Some(default_flag.trim_start_matches("--progress=").to_owned());
+            }
+            default_flag if default_flag.starts_with("--platform=") => {
+                platform = Some(default_flag.trim_start_matches("--platform=").to_owned());
+            }
+            default_flag if default_flag.starts_with("--build-arg=") => {
+                let raw = default_flag.trim_start_matches("--build-arg=");
+                let (k, v) = parse_build_arg_kv(raw)?;
+                cli_build_args.insert(k, v);
             }
             "--file" | "-f" => {
                 file_path = Some(PathBuf::from(iter.next().context("--file needs a path")?))
@@ -614,6 +1147,11 @@ fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> 
         .context("specify a <service> or set `service = \"...\"` in rudder.toml")?;
     let dockerfile = dockerfile.unwrap_or_else(|| cfg.dockerfile.clone());
     let context_path = PathBuf::from(context_dir.unwrap_or_else(|| cfg.context.clone()));
+    let effective_platform = platform.or(cfg.platform);
+    let mut merged_build_args = cfg.build_args;
+    for (k, v) in cli_build_args {
+        merged_build_args.insert(k, v);
+    }
     let effective_checks = if checks.is_empty() {
         cfg.checks
     } else {
@@ -622,6 +1160,11 @@ fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> 
     let effective_keep = local_keep.or(cfg.local_keep_count);
     let git_sha = image::detect_git_sha(&context_path);
     let tag = tag.unwrap_or_else(|| image::default_tag(git_sha.as_deref()));
+    let protected_tag = if effective_keep.is_some() {
+        fetch_deployed_tag_best_effort(ctx, &service).await
+    } else {
+        None
+    };
 
     let images_root = config::images_dir(&ctx.config_path);
     let _ = image::build_and_store_local(
@@ -634,6 +1177,11 @@ fn build_cmd(args: Vec<String>, ctx: &Context, out: &mut (dyn Write + Send)) -> 
             checks: &effective_checks,
             skip_checks,
             local_keep_count: effective_keep,
+            platform: effective_platform.as_deref(),
+            no_cache,
+            progress: progress.as_deref(),
+            build_args: &merged_build_args,
+            protected_tag: protected_tag.as_deref(),
         },
         out,
     )?;
@@ -646,6 +1194,7 @@ async fn push_cmd(
     ctx: &Context,
     out: &mut (dyn Write + Send),
 ) -> anyhow::Result<()> {
+    let started = Instant::now();
     let mut tag = None;
     let mut service_spec = None;
     let mut deploy_now = None;
@@ -655,6 +1204,10 @@ async fn push_cmd(
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                print_push_help(out)?;
+                return Ok(());
+            }
             "--service" | "-s" => {
                 service_spec = Some(iter.next().context("--service needs a value")?)
             }
@@ -720,10 +1273,67 @@ async fn push_cmd(
         bail!("local archive file is missing: {}", archive.display());
     }
 
+    // Check if the exact tag + SHA-256 is already present in R2 to skip redundant uploads.
+    let existing_in_r2 = api
+        .get(&format!("/api/v1/services/{}/images", service.id), &[])
+        .await
+        .ok()
+        .and_then(|v| v.as_array().cloned())
+        .unwrap_or_default()
+        .into_iter()
+        .find(|row| {
+            row["tag"].as_str() == Some(record.tag.as_str())
+                && row["sha256"].as_str() == Some(record.sha256.as_str())
+                && row["r2_present"].as_bool() == Some(true)
+        });
+
+    if existing_in_r2.is_some() {
+        writeln!(
+            out,
+            "==> Archive {} (tag {}, sha256 {}) is already present in Cloudflare R2; skipping upload.",
+            record.image_ref,
+            record.tag,
+            &record.sha256[..12]
+        )?;
+        writeln!(
+            out,
+            "Pushed {} (tag {}) to Cloudflare R2 [sha256: {}] (cached)",
+            service.path(),
+            record.tag,
+            &record.sha256[..12]
+        )?;
+        if deploy_now == Some(true) {
+            writeln!(
+                out,
+                "Deploying {} from Cloudflare R2 ({})",
+                service.path(),
+                record.tag
+            )?;
+            let done = api
+                .post(
+                    &format!("/api/v1/services/{}/images/deploy", service.id),
+                    json!({ "tag": record.tag }),
+                )
+                .await?;
+            return report(&done, &mut 0, out);
+        }
+        writeln!(
+            out,
+            "Image {} is stored in R2 (auto-deploy is off; run `rudder deploy {}` when ready).",
+            record.tag,
+            service.path()
+        )?;
+        return Ok(());
+    }
+
     writeln!(
         out,
-        "==> Pushing {} (tag {}, {} bytes) to Cloudflare R2 via {}...",
-        record.image_ref, record.tag, record.size_bytes, api.base
+        "==> Pushing {} (tag {}, {} / {} bytes) to Cloudflare R2 via {}...",
+        record.image_ref,
+        record.tag,
+        image::format_bytes(record.size_bytes),
+        record.size_bytes,
+        api.base
     )?;
 
     let mut query = vec![
@@ -747,9 +1357,11 @@ async fn push_cmd(
             &format!("/api/v1/services/{}/images", service.id),
             &query,
             &archive,
+            out,
         )
         .await?;
 
+    let elapsed = started.elapsed();
     writeln!(
         out,
         "Pushed {} (tag {}) to Cloudflare R2 [sha256: {}]",
@@ -757,6 +1369,19 @@ async fn push_cmd(
         record.tag,
         &record.sha256[..12]
     )?;
+    writeln!(out, "  Service:     {}", service.path())?;
+    writeln!(out, "  Image:       {}", record.image_ref)?;
+    writeln!(out, "  Tag:         {}", record.tag)?;
+    writeln!(
+        out,
+        "  Size:        {} ({} bytes)",
+        image::format_bytes(record.size_bytes),
+        record.size_bytes
+    )?;
+    writeln!(out, "  Digest:      sha256:{} (verified by panel)", record.sha256)?;
+    writeln!(out, "  Duration:    {:.1}s", elapsed.as_secs_f64())?;
+    writeln!(out, "  Dashboard:   {}/services/{}", api.base, service.id)?;
+
     if let Some(pruned) = resp["pruned_tags"].as_array() {
         let tags: Vec<&str> = pruned.iter().filter_map(|v| v.as_str()).collect();
         if !tags.is_empty() {
@@ -844,9 +1469,20 @@ async fn images_cmd(
             let keep = keep_count
                 .or(cfg.local_keep_count)
                 .context("specify --keep <N> or set local_keep_count in rudder.toml")?;
-            let mut removed = image::prune_local_store(&images_root, &service_spec, keep)?;
+            let protected_tag = fetch_deployed_tag_best_effort(ctx, &service_spec).await;
+            let mut removed = image::prune_local_store(
+                &images_root,
+                &service_spec,
+                keep,
+                protected_tag.as_deref(),
+            )?;
             if removed.is_empty() {
-                removed = image::prune_local_store(&images_root, &service.path(), keep)?;
+                removed = image::prune_local_store(
+                    &images_root,
+                    &service.path(),
+                    keep,
+                    protected_tag.as_deref(),
+                )?;
             }
             writeln!(
                 out,
@@ -1244,6 +1880,10 @@ async fn deploy(
     let mut image = None;
     let mut build_flag = None;
     let mut skip_checks = false;
+    let mut platform = None;
+    let mut no_cache = false;
+    let mut progress = None;
+    let mut cli_build_args = BTreeMap::new();
     let mut file_path = None;
     let mut wait = true;
     let mut timeout = Duration::from_secs(1800);
@@ -1254,6 +1894,25 @@ async fn deploy(
             "--build" => build_flag = Some(true),
             "--no-build" => build_flag = Some(false),
             "--skip-checks" | "--no-checks" | "--no-check" => skip_checks = true,
+            "--platform" => platform = Some(args.next().context("--platform needs a value")?),
+            "--no-cache" => no_cache = true,
+            "--progress" => progress = Some(args.next().context("--progress needs a mode")?),
+            "--build-arg" => {
+                let raw = args.next().context("--build-arg needs KEY=VALUE")?;
+                let (k, v) = parse_build_arg_kv(&raw)?;
+                cli_build_args.insert(k, v);
+            }
+            default_flag if default_flag.starts_with("--progress=") => {
+                progress = Some(default_flag.trim_start_matches("--progress=").to_owned());
+            }
+            default_flag if default_flag.starts_with("--platform=") => {
+                platform = Some(default_flag.trim_start_matches("--platform=").to_owned());
+            }
+            default_flag if default_flag.starts_with("--build-arg=") => {
+                let raw = default_flag.trim_start_matches("--build-arg=");
+                let (k, v) = parse_build_arg_kv(raw)?;
+                cli_build_args.insert(k, v);
+            }
             "--file" | "-f" => {
                 file_path = Some(PathBuf::from(args.next().context("--file needs a path")?))
             }
@@ -1283,6 +1942,12 @@ async fn deploy(
         let context_path = PathBuf::from(&cfg.context);
         let git_sha = image::detect_git_sha(&context_path);
         let tag = image.unwrap_or_else(|| image::default_tag(git_sha.as_deref()));
+        let effective_platform = platform.or(cfg.platform);
+        let mut merged_build_args = cfg.build_args;
+        for (k, v) in cli_build_args {
+            merged_build_args.insert(k, v);
+        }
+        let protected_tag = fetch_deployed_tag_best_effort(ctx, &spec).await;
         let images_root = config::images_dir(&ctx.config_path);
         let (record, _) = image::build_and_store_local(
             &image::BuildParams {
@@ -1294,6 +1959,11 @@ async fn deploy(
                 checks: &cfg.checks,
                 skip_checks,
                 local_keep_count: cfg.local_keep_count,
+                platform: effective_platform.as_deref(),
+                no_cache,
+                progress: progress.as_deref(),
+                build_args: &merged_build_args,
+                protected_tag: protected_tag.as_deref(),
             },
             out,
         )?;
@@ -1631,5 +2301,136 @@ mod tests {
     fn version_constant_matches_the_product() {
         assert_eq!(rudder_core::PRODUCT, "rudder");
         assert!(!rudder_core::VERSION.is_empty());
+    }
+
+    #[tokio::test]
+    async fn subcommand_help_flags_succeed_without_login() {
+        let ctx = Context {
+            config_path: std::env::temp_dir().join("nonexistent-rudder-config.json"),
+            url: None,
+            token: None,
+            read_token: Box::new(|| Ok(String::new())),
+            poll: Duration::from_millis(10),
+        };
+        for cmd in ["login", "init", "build", "push", "deploy", "images", "status", "logs", "update"] {
+            let mut out = Vec::new();
+            run(vec![cmd.into(), "--help".into()], &ctx, &mut out)
+                .await
+                .unwrap_or_else(|e| panic!("`rudder {cmd} --help` failed: {e}"));
+            let text = String::from_utf8(out).unwrap();
+            assert!(text.contains("Usage:"), "`rudder {cmd} --help` missing Usage: {text}");
+        }
+    }
+
+    #[test]
+    fn detects_cloudflare_access_redirect_and_gives_actionable_error() {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::LOCATION,
+            "https://knotree.cloudflareaccess.com/cdn-cgi/access/login/rudder.dymini.com?kid=abc"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(
+            reqwest::header::WWW_AUTHENTICATE,
+            "Cloudflare-Access".parse().unwrap(),
+        );
+        let err = check_cloudflare_access_interception(
+            "https://rudder.dymini.com",
+            "/api/v1/services",
+            reqwest::StatusCode::FOUND,
+            &headers,
+            b"",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("Cloudflare Access intercepted"), "{err}");
+        assert!(err.contains("CF_ACCESS_CLIENT_ID"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn cli_login_and_api_automatically_traverse_mcp_bypass_behind_cloudflare_access() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let base = format!("http://{addr}");
+
+        let server = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 8192];
+                    let n = stream.read(&mut buf).await.unwrap_or(0);
+                    let req = String::from_utf8_lossy(&buf[..n]);
+                    let first_line = req.lines().next().unwrap_or_default();
+                    let path = first_line.split_whitespace().nth(1).unwrap_or("/");
+                    let reply = if path.starts_with("/api/v1/") {
+                        "HTTP/1.1 302 Found\r\nLocation: https://knotree.cloudflareaccess.com/cdn-cgi/access/login/rudder.dymini.com?kid=1\r\nWww-Authenticate: Cloudflare-Access\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+                    } else if path == "/mcp/api/v1/cli/auth/start" {
+                        let body = r#"{"request_id":"req-1","poll_secret":"sec-1","device_code":"ABCD1234","verification_path":"/tokens?device=1"}"#;
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                    } else if path == "/mcp/api/v1/cli/auth/poll" {
+                        let body = r#"{"status":"approved","token":"rdr_testtoken123456"}"#;
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                    } else if path == "/mcp/api/v1/me" {
+                        let body = r#"{"user":{"email":"admin@example.com","role":"owner"}}"#;
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                    } else {
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+                    };
+                    let _ = stream.write_all(reply.as_bytes()).await;
+                    let _ = stream.shutdown().await;
+                });
+            }
+        });
+
+        let dir = std::env::temp_dir().join(format!(
+            "rudder-cf-bypass-test-{}",
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(1)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ctx = Context {
+            config_path: dir.join("config.json"),
+            url: None,
+            token: None,
+            read_token: Box::new(|| Ok(String::new())),
+            poll: Duration::from_millis(10),
+        };
+        let mut out = Vec::new();
+        run(
+            vec![
+                "login".into(),
+                "--url".into(),
+                base.clone(),
+                "--device".into(),
+            ],
+            &ctx,
+            &mut out,
+        )
+        .await
+        .unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.contains("ABCD1234"), "{text}");
+        assert!(text.contains("admin@example.com (owner)"), "{text}");
+
+        let mut whoami_out = Vec::new();
+        run(vec!["whoami".into()], &ctx, &mut whoami_out)
+            .await
+            .unwrap();
+        let whoami_text = String::from_utf8(whoami_out).unwrap();
+        assert!(whoami_text.contains("admin@example.com (owner)"), "{whoami_text}");
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

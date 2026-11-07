@@ -132,7 +132,8 @@ pub use rollout::{
 };
 pub use rudder_image::{
     generate_device_code, image_object_key, normalize_device_code, select_images_to_prune,
-    validate_cli_callback_url, validate_image_tag, ImageVersionEntry,
+    select_images_to_prune_protecting, validate_cli_callback_url, validate_image_tag,
+    ImageVersionEntry,
 };
 pub use schedule::{is_due, next_after, parse_timezone, validate_schedule, PRESETS};
 pub use stack::{

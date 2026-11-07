@@ -159,6 +159,18 @@ pub fn select_images_to_prune(
     keep_days: Option<u32>,
     now: DateTime<Utc>,
 ) -> Vec<String> {
+    select_images_to_prune_protecting(entries, keep_count, keep_days, None, now)
+}
+
+/// Same as [`select_images_to_prune`], additionally protecting `protected_tag` (the image tag
+/// currently deployed on the service) so an active deployment's image is never deleted.
+pub fn select_images_to_prune_protecting(
+    entries: &[ImageVersionEntry],
+    keep_count: Option<u32>,
+    keep_days: Option<u32>,
+    protected_tag: Option<&str>,
+    now: DateTime<Utc>,
+) -> Vec<String> {
     if keep_count.is_none() && keep_days.is_none() {
         return Vec::new();
     }
@@ -169,6 +181,10 @@ pub fn select_images_to_prune(
     for (idx, item) in sorted.iter().enumerate() {
         if idx == 0 {
             // Never prune the most recent image version.
+            continue;
+        }
+        if protected_tag.is_some_and(|tag| item.tag == tag || item.id == tag) {
+            // Never prune the image version currently deployed on the service.
             continue;
         }
         let over_count = keep_count.is_some_and(|max| idx >= (max.max(1) as usize));
@@ -227,6 +243,11 @@ mod tests {
         assert_eq!(
             select_images_to_prune(&entries, None, Some(3), now),
             vec!["img-4"]
+        );
+        // Currently deployed tag is never pruned even when older than keep_count.
+        assert_eq!(
+            select_images_to_prune_protecting(&entries, Some(2), None, Some("v3"), now),
+            vec!["img-2", "img-4"]
         );
     }
 }

@@ -11,7 +11,7 @@ use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use rudder_core::{
-    image_object_key, select_images_to_prune, validate_image_ref, validate_image_tag,
+    image_object_key, select_images_to_prune_protecting, validate_image_ref, validate_image_tag,
     validate_prefix, Compression, ImageVersionEntry,
 };
 use serde::{Deserialize, Serialize};
@@ -359,6 +359,7 @@ struct ServiceImageContext {
     id: Uuid,
     name: String,
     kind: String,
+    current_image: Option<String>,
     image_auto_deploy: bool,
     image_r2_keep_count: Option<i32>,
     image_r2_keep_days: Option<i32>,
@@ -387,7 +388,7 @@ async fn push_service_image(
     auth.require_write()?;
     let service = sqlx::query_as::<_, ServiceImageContext>(
         r#"
-        SELECT id, name, kind, image_auto_deploy, image_r2_keep_count, image_r2_keep_days
+        SELECT id, name, kind, current_image, image_auto_deploy, image_r2_keep_count, image_r2_keep_days
         FROM services
         WHERE id = $1
         "#,
@@ -635,19 +636,32 @@ async fn push_service_image(
         })
         .collect();
 
-    let to_prune = select_images_to_prune(
+    let deployed_tag = service
+        .current_image
+        .as_deref()
+        .and_then(|img| {
+            all_images
+                .iter()
+                .find(|row| row.image_ref == img)
+                .map(|row| row.tag.as_str())
+                .or_else(|| img.rsplit_once(':').map(|(_, tag)| tag))
+        });
+
+    let to_prune = select_images_to_prune_protecting(
         &entries,
         effective_keep_count.and_then(|v| u32::try_from(v).ok()),
         effective_keep_days.and_then(|v| u32::try_from(v).ok()),
+        deployed_tag,
         Utc::now(),
     );
 
     let mut pruned_tags = Vec::new();
     for prune_id_str in to_prune {
-        if let Some(target) = all_images
-            .iter()
-            .find(|img| img.id.to_string() == prune_id_str && img.id != image_row.id)
-        {
+        if let Some(target) = all_images.iter().find(|img| {
+            img.id.to_string() == prune_id_str
+                && img.id != image_row.id
+                && service.current_image.as_deref() != Some(img.image_ref.as_str())
+        }) {
             let _ = s3::delete(destination.store.as_ref(), &target.object_key).await;
             let _ = sqlx::query("UPDATE rudder_images SET r2_present = FALSE WHERE id = $1")
                 .bind(target.id)
@@ -869,6 +883,20 @@ async fn delete_service_image(
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| not_found("Rudder Image not found"))?;
+
+    let current_image: Option<String> =
+        sqlx::query_scalar("SELECT current_image FROM services WHERE id = $1")
+            .bind(service_id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(ApiError::database)?
+            .flatten();
+    if current_image.as_deref() == Some(image.image_ref.as_str()) {
+        return Err(conflict(
+            "image_in_use",
+            "cannot delete the image version currently deployed on this service",
+        ));
+    }
 
     if image.r2_present {
         let settings = load_store_settings(&state.pool).await?;

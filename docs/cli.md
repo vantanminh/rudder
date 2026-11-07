@@ -122,12 +122,16 @@ This creates a `rudder.toml` configuration file:
 service = "shop/prod/web"
 dockerfile = "Dockerfile"
 context = "."
+platform = "linux/amd64"
 
 # Commands executed locally before building the Docker image (`rudder build`).
 checks = [
   "cargo test",
   "pnpm build",
 ]
+
+# Extra Docker --build-arg values (`GIT_SHA` and `BUILD_TIME` are injected automatically).
+build_args = { APP_ENV = "production" }
 
 # How many recent image versions to keep in Cloudflare R2 (older ones are pruned from R2).
 r2_keep_count = 10
@@ -142,12 +146,20 @@ deploy_build = false
 ### Step 1: Build and check locally (`rudder build`)
 
 ```sh
-rudder build                        # runs `checks` from rudder.toml, then builds & saves image locally
-rudder build --tag v1.4.0           # use an explicit version tag (defaults to timestamp + git SHA)
-rudder build --skip-checks          # skip local CI check commands
+rudder build                                  # runs `checks` from rudder.toml, then builds & saves image locally
+rudder build --tag v1.4.0                     # use an explicit version tag (defaults to YYYYMMDD-HHMMSS-<short-sha>)
+rudder build --platform linux/amd64           # target your server's architecture (e.g. from Apple Silicon or Windows)
+rudder build --no-cache --progress=plain      # force a clean BuildKit build with plain log output
+rudder build --build-arg FEATURE_FLAG=1       # pass additional --build-arg KEY=VAL flags (repeatable)
+rudder build --skip-checks                    # skip local CI check commands
 ```
 
-`rudder build` executes every command in `checks` on your machine. If all checks pass, it runs `docker build`, exports and compresses the image into `~/.config/rudder/images/<service>/<tag>.tar.gz` with its SHA-256 checksum, and prunes local archives beyond `local_keep_count`.
+What `rudder build` does:
+- Runs every command in `checks` on your machine (unless `--skip-checks` is passed).
+- Measures the Docker build context (respecting `<dockerfile>.dockerignore` or `.dockerignore`) and prints a warning if the context exceeds **200 MiB**.
+- Enables **BuildKit** (`DOCKER_BUILDKIT=1`) so `# syntax=docker/dockerfile:1.7` and `RUN --mount=type=cache` always work.
+- Automatically passes `--build-arg GIT_SHA=<commit-or-nogit>` and `--build-arg BUILD_TIME=<RFC3339-UTC>` (plus any `build_args` from `rudder.toml` or `--build-arg`). Outside a Git repository, it prints a notice and falls back to `GIT_SHA=nogit` and a timestamp tag.
+- Exports and compresses the image into `~/.config/rudder/images/<service>/<tag>.tar.gz` with its SHA-256 checksum, prints a summary (Image ID, Platform, Git SHA, Size, Digest, Duration, and Next step), and prunes local archives beyond `local_keep_count` (never pruning the currently deployed image).
 
 ### Step 2: Push to Cloudflare R2 (`rudder push`)
 
@@ -159,53 +171,49 @@ rudder push --no-deploy             # upload to R2 only, even if service auto-de
 rudder push --r2-keep 5             # keep only the 5 newest versions on R2
 ```
 
-When `rudder push` completes:
-- Rudder verifies the SHA-256 digest and stores the archive in Cloudflare R2.
-- Rudder prunes older objects in R2 beyond the retention limit (`r2_keep_count`), while keeping the local copy on your computer.
-- If the service has **Auto-deploy** enabled (or `--deploy` was passed), Rudder immediately pulls the archive from R2 onto the target server, runs `docker load`, and replaces the container. Otherwise, Rudder records the version and emits a notification.
-
-### Step 3: Deploy (`rudder deploy`)
-
-```sh
-rudder deploy                       # deploy the latest R2 image for the service in rudder.toml
-rudder deploy shop/prod/web --image v1.4.0
-rudder deploy --build               # run full local CI check -> build -> push to R2 -> deploy in one command
-```
-
-If you deploy or roll back to an older `<tag>` that was already pruned from Cloudflare R2 to save storage space, `rudder` automatically detects the local archive on your machine, re-uploads it to R2, and deploys it.
-
-### Check the setup (`rudder status`, `rudder whoami`)
-
-```bash
-rudder whoami            # which panel and account this CLI is signed in to
-rudder status            # bucket, setup checklist, push/build counts, usage per service
-rudder status --check    # also writes, reads, and deletes a probe object in the bucket
-```
-
-`rudder status` prints the same facts as **S3 → Rudder Image** in the panel.
-
-### Step 4: Manage local & R2 image versions (`rudder images`)
-
-```sh
-rudder images list                  # list versions across local storage and Cloudflare R2
-rudder images prune --keep 10       # prune local archives on your machine, keeping the newest 10
-rudder images rollback v1.3.9       # roll back to v1.3.9 (from R2, or re-uploading from local if pruned from R2)
-rudder images remove v1.3.9         # forget v1.3.9 on the panel and delete it from R2
-rudder images remove v1.3.9 --r2-only   # only free its space on R2; keep the history
-```
-
-Example output of `rudder images list`:
-
-```text
-TAG                       SHA256        SIZE        STORAGE
-v1.4.0                    9f86d081884c  18452910    local + R2
-v1.3.9                    4b227777d4dd  18440112    local + R2
-v1.3.8                    e3b0c44298fc  18399004    local only
-```
+When `rudder push` runs:
+- If the exact `tag` + `sha256` is already present in Cloudflare R2, `rudder push` skips re-uploading the archive (and proceeds directly to deployment when `--deploy` is passed).
+- Otherwise, `rudder push` streams the archive with upload progress and automatic retry on transient network or `502`/`503`/`504` errors.
+- Rudder verifies the `expected_sha256` digest on the panel before registering the version in the database (deleting the R2 object if the digest mismatches, so a failed push never leaves a half-registered image version).
+- Rudder prunes older objects in R2 beyond `r2_keep_count` while protecting both the newest image and the image currently deployed on the service.
+- If your panel is protected by **Cloudflare Access**, either add a Bypass policy for `/api/v1/*` (Rudder still requires `Authorization: Bearer rdr_...` on every API endpoint) or export `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` from a Cloudflare Access Service Token.
 
 ---
 
-## 5. Other CLI commands
+## 5. Migrate from GitHub Actions / GHCR to local build
+
+Moving a service from "build on GitHub Actions → push to `ghcr.io` → server pulls" to "build locally with `rudder build` → push to Cloudflare R2 with `rudder push` → deploy from Rudder" takes four steps:
+
+1. **Connect Cloudflare R2 once in the panel**:
+   - Add your R2 bucket under **S3 → S3 destinations**, then select it under **S3 → Rudder Image → Setup**.
+2. **Sign in from your workstation**:
+   ```sh
+   rudder login --url https://panel.example.com --device
+   rudder status --check
+   ```
+3. **Create `rudder.toml` in your repository root**:
+   ```toml
+   service = "my-project/staging/api"
+   dockerfile = "Dockerfile"
+   context = "."
+   platform = "linux/amd64"
+   checks = ["cargo test --workspace"]
+   deploy_build = false
+   r2_keep_count = 10
+   local_keep_count = 20
+   ```
+   - Make sure your `.dockerignore` (or `<Dockerfile>.dockerignore`) excludes large local directories such as `target/`, `node_modules/`, and `.git/` so `rudder build` sends a small context to BuildKit.
+   - If your `Dockerfile` declares `ARG GIT_SHA` and `ARG BUILD_TIME`, `rudder build` populates both automatically on every build.
+4. **Build, push, and deploy**:
+   ```sh
+   rudder build                  # builds locally with BuildKit + layer cache
+   rudder push --deploy          # uploads to R2, verifies SHA-256, and deploys to staging
+   ```
+   Once verified on staging, you can disable or remove the `.github/workflows/*.yml` image build job and GHCR registry credentials on the server.
+
+---
+
+## 6. Other CLI commands
 
 ### Choosing a service
 

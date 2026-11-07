@@ -66,6 +66,13 @@ pub async fn run(args: Vec<String>, out: &mut (dyn Write + Send)) -> anyhow::Res
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                writeln!(
+                    out,
+                    "Usage: rudder update [--check] [--repo OWNER/REPO]\n\nOptions:\n  --check              Check whether a newer release is available without installing\n  --repo <OWNER/REPO>  GitHub repository to fetch releases from (default: {DEFAULT_GITHUB_REPO})"
+                )?;
+                return Ok(());
+            }
             "--check" => check_only = true,
             "--yes" | "-y" => {}
             "--repo" => repo = iter.next().context("--repo needs OWNER/REPO")?,
