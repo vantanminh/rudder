@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-07
+
 ### Fixed
 - **`rudder push` now works for Compose services.** It failed with `400: Rudder Image push is only available for application services`. The image is stored as before, and a deploy loads it onto the stack's server and runs `docker compose up -d`, so reference the image (for example `rudder-image/<service>:<tag>`) in your compose file.
 
