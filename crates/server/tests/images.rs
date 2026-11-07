@@ -356,3 +356,117 @@ async fn r2_image_store_push_retention_notify_and_repush(pool: PgPool) {
     assert_eq!(probe.status, StatusCode::OK, "{}", probe.body);
     assert_eq!(probe.body["ok"], true, "{}", probe.body);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn compose_service_accepts_image_push(pool: PgPool) {
+    let dir = std::env::temp_dir().join(format!("rudder-images-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let router = app(pool, &dir);
+
+    let setup = call(
+        &router,
+        "POST",
+        "/api/v1/setup",
+        None,
+        Some(json!({
+            "email": "owner@example.com",
+            "password": "correct-horse-battery",
+            "display_name": "Owner"
+        })),
+    )
+    .await;
+    assert_eq!(setup.status, StatusCode::OK);
+    let cookie = setup.cookie.unwrap();
+    let csrf = setup.body["csrf_token"].as_str().unwrap().to_owned();
+    let session = Some((cookie.as_str(), csrf.as_str()));
+
+    let server = call(
+        &router,
+        "POST",
+        "/api/v1/servers",
+        session,
+        Some(json!({ "name": "local", "kind": "local" })),
+    )
+    .await;
+    let project = call(
+        &router,
+        "POST",
+        "/api/v1/projects",
+        session,
+        Some(json!({ "name": "acme" })),
+    )
+    .await;
+    let env = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/v1/projects/{}/environments",
+            project.body["id"].as_str().unwrap()
+        ),
+        session,
+        Some(json!({ "name": "prod" })),
+    )
+    .await;
+    let stack = call(
+        &router,
+        "POST",
+        &format!(
+            "/api/v1/environments/{}/stacks",
+            env.body["id"].as_str().unwrap()
+        ),
+        session,
+        Some(json!({
+            "name": "shop",
+            "server_id": server.body["id"],
+            "source": "inline",
+            "compose_yaml": "services:\n  web:\n    image: rudder-image/shop:v1\n"
+        })),
+    )
+    .await;
+    assert_eq!(stack.status, StatusCode::CREATED, "{}", stack.body);
+    let stack_id = stack.body["service"]["id"].as_str().unwrap().to_owned();
+
+    let dest = call(
+        &router,
+        "POST",
+        "/api/v1/s3-destinations",
+        session,
+        Some(json!({
+            "name": "cloudflare-r2",
+            "endpoint": "http://local.r2.internal",
+            "region": "auto",
+            "bucket": "rudder-images",
+            "access_key_id": "R2ACCESSKEY1234",
+            "secret_access_key": "R2SECRETKEY567890",
+            "path_style": true
+        })),
+    )
+    .await;
+    assert_eq!(dest.status, StatusCode::CREATED);
+    let store = call(
+        &router,
+        "PUT",
+        "/api/v1/image-store/settings",
+        session,
+        Some(json!({ "destination_id": dest.body["id"], "path_prefix": "rudder-images" })),
+    )
+    .await;
+    assert_eq!(store.status, StatusCode::OK);
+
+    let pushed = call(
+        &router,
+        "POST",
+        &format!("/api/v1/services/{stack_id}/images"),
+        session,
+        Some(json!({
+            "tag": "v1",
+            "compression": "none",
+            "deploy": false,
+            "archive_base64": base64::engine::general_purpose::STANDARD.encode(b"fake-tar")
+        })),
+    )
+    .await;
+    assert_eq!(pushed.status, StatusCode::CREATED, "{}", pushed.body);
+    assert_eq!(pushed.body["image"]["tag"], "v1");
+    assert_eq!(pushed.body["deployed"], false);
+}

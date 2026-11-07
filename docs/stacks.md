@@ -85,6 +85,10 @@ Actions run in the background and appear under Deployments. Only one runs per st
 
 **Cancel** (or `POST /api/v1/services/{id}/stack/cancel`) stops the `docker compose` process; the deployment ends as `cancelled`. Containers that had already been replaced stay as they are, and the stack goes back to `running` when it was running before. A stack that was not running before (a first deploy that is cancelled, or one that had been stopped) is `stopped`. The stack status changes in the same moment as the deployment, so it does not stay on Deploying after the action is already over. An action that runs longer than `RUDDER_STACK_TIMEOUT_SECS` (default 3600, `0` for no limit) is stopped the same way and recorded as `failed`. Stacks on remote servers show their output when the agent finishes the command, not line by line, and cancelling them stops waiting rather than killing the remote process. If the panel restarts during an action, the deployment is marked `failed` ("interrupted by process restart").
 
+### Deploy a pushed image (Rudder Image)
+
+`rudder push` also works for a Compose service. The image is stored in the Image Store as for an application, and a deploy loads it onto the stack's server and runs `docker compose up -d`, which recreates the services whose image changed. Name the pushed image in the compose file (by default `rudder-image/<service name>:<tag>`, or the `image_ref` you pass to the push). The service's image policy decides whether a push deploys at once or waits for `rudder deploy`.
+
 ### Deploy on push
 
 Turn on *Deploy when I push to the branch* for a Git stack whose provider was connected with **Connect with GitHub**. The provider's webhook then runs a deploy (a rebuild when *Build images on every deploy* is on) for every push to the stack's branch. A push that arrives while another action runs is skipped.
