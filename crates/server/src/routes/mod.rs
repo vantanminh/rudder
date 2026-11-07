@@ -6,6 +6,7 @@ pub mod cache;
 pub mod catalog;
 pub mod cloudflare;
 pub mod databases;
+pub mod docs;
 pub mod edge;
 pub mod git;
 pub mod github_app;

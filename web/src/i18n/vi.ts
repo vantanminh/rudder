@@ -867,6 +867,22 @@ export const vi: Record<string, string> = {
   "Server added": "Đã thêm máy chủ",
   "Could not add server": "Không thể thêm máy chủ",
   "Could not remove server": "Không thể xóa máy chủ",
+  "Type {name} to confirm": "Nhập {name} để xác nhận",
+  "Delete project": "Xóa dự án",
+  "Delete environment": "Xóa môi trường",
+  "Delete service": "Xóa dịch vụ",
+  "Project deleted": "Đã xóa dự án",
+  "Environment deleted": "Đã xóa môi trường",
+  "Service deleted": "Đã xóa dịch vụ",
+  "Could not delete project": "Không thể xóa dự án",
+  "Could not delete environment": "Không thể xóa môi trường",
+  "Could not delete service": "Không thể xóa dịch vụ",
+  "This removes {project}, all its environments and its {count} services, and stops and removes their containers. This cannot be undone.":
+    "Thao tác này xóa {project}, mọi môi trường và {count} dịch vụ của nó, đồng thời dừng và xóa các container. Không thể hoàn tác.",
+  "This removes {environment} from {project} and its {count} services, and stops and removes their containers. This cannot be undone.":
+    "Thao tác này xóa {environment} khỏi {project} cùng {count} dịch vụ của nó, đồng thời dừng và xóa các container. Không thể hoàn tác.",
+  "This stops and removes {service}, its containers and its domains. This cannot be undone.":
+    "Thao tác này dừng và xóa {service}, các container và tên miền của nó. Không thể hoàn tác.",
   "Could not issue a join token": "Không thể cấp token tham gia",
   "Server responded": "Máy chủ đã phản hồi",
   "Probe failed": "Kiểm tra kết nối thất bại",

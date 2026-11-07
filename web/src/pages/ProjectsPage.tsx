@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 import { Icon } from "../components/icons";
+import { DeleteDialog } from "../components/DeleteDialog";
 import { CreateStackFields } from "../components/stacks";
 import {
   Alert,
@@ -39,7 +40,12 @@ type Service = Schemas["ServiceSummary"];
 type Server = Schemas["ServerView"];
 
 type Filter = "all" | "running" | "issues" | "stopped";
-type DialogName = "project" | "environment" | "service";
+type DialogName =
+  | "project"
+  | "environment"
+  | "service"
+  | "delete-project"
+  | "delete-environment";
 
 const LIVE = 10_000;
 
@@ -261,6 +267,31 @@ export function ProjectsPage() {
           }}
         />
       ) : null}
+      {dialog === "delete-project" && active ? (
+        <DeleteProjectDialog
+          project={active}
+          serviceCount={perProject.get(active.id)?.total ?? 0}
+          onClose={() => setDialog(null)}
+          onDeleted={() => {
+            setDialog(null);
+            setParams({});
+          }}
+        />
+      ) : null}
+      {dialog === "delete-environment" && active && activeEnvironment ? (
+        <DeleteEnvironmentDialog
+          project={active}
+          environment={activeEnvironment}
+          serviceCount={
+            serviceList.filter((service) => service.environment_id === activeEnvironment.id).length
+          }
+          onClose={() => setDialog(null)}
+          onDeleted={() => {
+            setDialog(null);
+            setParams({ project: active.id });
+          }}
+        />
+      ) : null}
       {dialog === "service" && active && activeEnvironment ? (
         <NewServiceDialog
           environment={activeEnvironment}
@@ -454,6 +485,16 @@ function ProjectDetail({
             </Button>
             <Button icon="plus" disabled={!environment} onClick={() => onDialog("service")}>
               {t("Add service")}
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!environment}
+              onClick={() => onDialog("delete-environment")}
+            >
+              {t("Delete environment")}
+            </Button>
+            <Button variant="danger" onClick={() => onDialog("delete-project")}>
+              {t("Delete project")}
             </Button>
           </>
         ) : null
@@ -970,5 +1011,89 @@ function NewServiceDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+function useDeletion(path: string, done: string, failed: string, onDeleted: () => void) {
+  const t = useT();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api(path, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success(t(done));
+      await queryClient.invalidateQueries();
+      onDeleted();
+    },
+    onError: (error) => toast.error(error instanceof ApiError ? error.message : t(failed)),
+  });
+}
+
+function DeleteProjectDialog({
+  project,
+  serviceCount,
+  onClose,
+  onDeleted,
+}: {
+  project: Project;
+  serviceCount: number;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const t = useT();
+  const remove = useDeletion(
+    `/api/v1/projects/${project.id}`,
+    "Project deleted",
+    "Could not delete project",
+    onDeleted,
+  );
+  return (
+    <DeleteDialog
+      title={t("Delete project")}
+      name={project.name}
+      pending={remove.isPending}
+      onClose={onClose}
+      onConfirm={() => remove.mutate()}
+    >
+      {t(
+        "This removes {project}, all its environments and its {count} services, and stops and removes their containers. This cannot be undone.",
+        { project: project.name, count: serviceCount },
+      )}
+    </DeleteDialog>
+  );
+}
+
+function DeleteEnvironmentDialog({
+  project,
+  environment,
+  serviceCount,
+  onClose,
+  onDeleted,
+}: {
+  project: Project;
+  environment: Environment;
+  serviceCount: number;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const t = useT();
+  const remove = useDeletion(
+    `/api/v1/environments/${environment.id}`,
+    "Environment deleted",
+    "Could not delete environment",
+    onDeleted,
+  );
+  return (
+    <DeleteDialog
+      title={t("Delete environment")}
+      name={environment.name}
+      pending={remove.isPending}
+      onClose={onClose}
+      onConfirm={() => remove.mutate()}
+    >
+      {t(
+        "This removes {environment} from {project} and its {count} services, and stops and removes their containers. This cannot be undone.",
+        { environment: environment.name, project: project.name, count: serviceCount },
+      )}
+    </DeleteDialog>
   );
 }

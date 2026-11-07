@@ -10,6 +10,7 @@ pub mod config;
 pub mod decrypt;
 pub mod image;
 pub mod project;
+pub mod skills;
 pub mod update;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -40,6 +41,8 @@ Usage:
   rudder logs <service> [-f] [-n LINES] [--since 15m|RFC3339] [--level L] [--source S] [--grep TEXT]
   rudder cache purge <service> (--all | --path P... | --prefix P) [--domain ID]
   rudder backup decrypt [--in FILE] [--out FILE]          (passphrase from RUDDER_BACKUP_PASSPHRASE)
+  rudder docs search <words...> [--limit N] | read <guide> | list   search or read the documentation of your panel
+  rudder skills install|list|remove|print [--agent A] [--project]   teach AI coding agents about Rudder
   rudder update [--check] [--repo OWNER/REPO]             update rudder CLI natively from GitHub releases
   rudder --version
 
@@ -149,6 +152,15 @@ pub async fn run(
             }
             images_cmd(&Api::from_context(ctx)?, rest, ctx, out).await
         }
+        Some("skills") => skills::run(args.collect(), &skills::Env::from_env(), out),
+        Some("docs") => {
+            let rest: Vec<String> = args.collect();
+            if rest.is_empty() || rest.iter().any(|a| a == "--help" || a == "-h") {
+                writeln!(out, "{DOCS_HELP}")?;
+                return Ok(());
+            }
+            docs_cmd(&Api::from_context(ctx)?, rest, out).await
+        }
         Some("update" | "self-update") => update::run(args.collect(), out).await,
         Some("services") => {
             let rest: Vec<String> = args.collect();
@@ -205,6 +217,95 @@ pub async fn run(
             _ => bail!("usage: rudder cache purge <service> (--all | --path P... | --prefix P)"),
         },
         Some(other) => bail!("unknown command '{other}'; see rudder --help"),
+    }
+}
+
+const DOCS_HELP: &str = "Usage:
+  rudder docs search <words...> [--limit N]   search the documentation of your panel
+  rudder docs read <guide>                    print one guide as Markdown (names come from list or search)
+  rudder docs list                            list the guides
+
+The documentation is served by your own panel, so it matches the version you run.";
+
+async fn docs_cmd(
+    api: &Api,
+    args: Vec<String>,
+    out: &mut (dyn Write + Send),
+) -> anyhow::Result<()> {
+    let mut args = args.into_iter();
+    match args.next().as_deref() {
+        Some("search") => {
+            let mut words: Vec<String> = Vec::new();
+            let mut limit = 5usize;
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--limit" | "-n" => {
+                        limit = args
+                            .next()
+                            .context("--limit needs a number")?
+                            .parse()
+                            .context("--limit must be a number")?;
+                    }
+                    _ => words.push(arg),
+                }
+            }
+            let query = words.join(" ");
+            if query.trim().is_empty() {
+                bail!("usage: rudder docs search <words...> [--limit N]");
+            }
+            let found = api
+                .get(
+                    "/api/v1/docs/search",
+                    &[("q", query.clone()), ("limit", limit.to_string())],
+                )
+                .await?;
+            let results = found["results"].as_array().cloned().unwrap_or_default();
+            if results.is_empty() {
+                writeln!(
+                    out,
+                    "No guide matches '{query}'. Try other words or `rudder docs list`."
+                )?;
+                return Ok(());
+            }
+            for (index, hit) in results.iter().enumerate() {
+                writeln!(
+                    out,
+                    "{}. {} > {}   (rudder docs read {})
+   {}",
+                    index + 1,
+                    hit["title"].as_str().unwrap_or(""),
+                    hit["section"].as_str().unwrap_or(""),
+                    hit["name"].as_str().unwrap_or(""),
+                    hit["snippet"].as_str().unwrap_or("")
+                )?;
+            }
+            Ok(())
+        }
+        Some("read") => {
+            let name = args.next().context("usage: rudder docs read <guide>")?;
+            if !name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            {
+                bail!("'{name}' is not a guide name; see rudder docs list");
+            }
+            let page = api.get(&format!("/api/v1/docs/{name}"), &[]).await?;
+            writeln!(out, "{}", page["content"].as_str().unwrap_or(""))?;
+            Ok(())
+        }
+        Some("list") => {
+            let list = api.get("/api/v1/docs", &[]).await?;
+            for guide in list.as_array().into_iter().flatten() {
+                writeln!(
+                    out,
+                    "{:<20} {}",
+                    guide["name"].as_str().unwrap_or(""),
+                    guide["title"].as_str().unwrap_or("")
+                )?;
+            }
+            Ok(())
+        }
+        _ => bail!("usage: rudder docs search <words...> | read <guide> | list"),
     }
 }
 

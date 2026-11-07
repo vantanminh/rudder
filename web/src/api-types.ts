@@ -1081,6 +1081,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the built-in Rudder guides of this panel version */
+        get: operations["get_v1_docs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20) */
+        get: operations["get_v1_docs_search"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/docs/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read one Rudder guide as Markdown by name, as listed by the docs list or search */
+        get: operations["get_v1_docs__name_"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/domains/{id}": {
         parameters: {
             query?: never;
@@ -4185,6 +4236,36 @@ export interface components {
             action: string;
             detail?: string | null;
             host: string;
+        };
+        DocHit: {
+            name: string;
+            /**
+             * Format: int32
+             * @description Higher is a better match.
+             */
+            score: number;
+            /** @description The heading the match is under. */
+            section: string;
+            snippet: string;
+            title: string;
+        };
+        DocPage: {
+            /** @description The whole guide as Markdown. */
+            content: string;
+            name: string;
+            title: string;
+            version: string;
+        };
+        DocSearchResponse: {
+            query: string;
+            results: components["schemas"]["DocHit"][];
+            /** @description Version of the panel the guides belong to. */
+            version: string;
+        };
+        DocSummary: {
+            /** @description Pass this to the read call, for example `cli`. */
+            name: string;
+            title: string;
         };
         DomainCacheView: {
             /** Format: uuid */
@@ -7668,6 +7749,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DatabaseEngineView"][];
+                };
+            };
+        };
+    };
+    get_v1_docs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List the built-in Rudder guides of this panel version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocSummary"][];
+                };
+            };
+        };
+    };
+    get_v1_docs_search: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocSearchResponse"];
+                };
+            };
+        };
+    };
+    get_v1_docs__name_: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read one Rudder guide as Markdown by name, as listed by the docs list or search */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocPage"];
                 };
             };
         };

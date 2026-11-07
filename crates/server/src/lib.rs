@@ -13,6 +13,7 @@ mod cloudflare;
 mod config;
 mod db;
 mod deploy;
+mod docs;
 mod driver;
 mod embed;
 mod error;
@@ -337,6 +338,7 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::system::router())
         .merge(routes::load::router())
         .merge(routes::updates::router())
+        .merge(routes::docs::router())
         .merge(routes::mcp::router());
     let mcp_api = api.clone();
     axum::Router::new()

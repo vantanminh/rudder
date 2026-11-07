@@ -247,3 +247,41 @@ rudder cache purge shop/web --prefix /blog/ [--domain <domain id>]
 ```sh
 RUDDER_BACKUP_PASSPHRASE=... rudder backup decrypt --in db.dump.zst.enc --out db.dump.zst
 ```
+
+---
+
+## 7. Skills for AI agents
+
+`rudder skills` installs a skill, a short guide that AI coding agents load on demand, so they know what Rudder is and how to use it: the `rudder` CLI, the MCP server, the permission model, and when to ask you before doing something destructive. The text is built into the CLI, so it always matches the version you installed.
+
+```sh
+rudder skills install                       # every agent found in your home directory
+rudder skills install --agent claude        # one agent
+rudder skills install --project             # into this repository, so the whole team gets it
+rudder skills list                          # what is installed and whether it is current
+rudder skills remove
+rudder skills print                         # the skill text, to put anywhere else
+```
+
+| `--agent` | Your home directory | With `--project` |
+| --- | --- | --- |
+| `claude` | `~/.claude/skills/rudder/SKILL.md` | `.claude/skills/rudder/SKILL.md` |
+| `codex` | `$CODEX_HOME` or `~/.codex`, then `skills/rudder/SKILL.md` | `.agents/skills/rudder/SKILL.md` |
+| `agents` | `~/.agents/skills/rudder/SKILL.md` | `.agents/skills/rudder/SKILL.md` |
+| `cursor` | not available | `.cursor/rules/rudder.mdc` |
+
+`--dir DIR` writes `DIR/rudder/SKILL.md` for any other agent that reads skill folders. Without `--agent`, the agents whose folder exists are used, and the command says so when it finds none.
+
+Files written by `rudder skills` carry a marker. Running `install` again updates them after you upgrade the CLI. A file with the same name that `rudder` did not write is left alone unless you pass `--force`, and `remove` only deletes files it wrote. `--dry-run` shows what would change. Restart the agent afterwards so it loads the skill.
+
+### Documentation from your panel
+
+The skill sends agents to your panel for documentation, so they read the version you run:
+
+```sh
+rudder docs search deploy an image          # ranked sections with snippets
+rudder docs read cli                        # a whole guide
+rudder docs list
+```
+
+Agents connected over MCP use the same content through `get_v1_docs_search` and `get_v1_docs__name_` (see [Search the documentation](mcp.md#search-the-documentation)).

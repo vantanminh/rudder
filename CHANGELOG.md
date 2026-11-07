@@ -8,6 +8,14 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **`rudder skills install` teaches AI coding agents about Rudder.** It installs a skill for Claude Code, Codex, Cursor, or any agent that reads skill folders (`--agent`, `--project`, `--dir`) that explains what Rudder is, how to use the CLI and MCP tools, and when to ask you first. `rudder skills list`, `remove`, and `print` manage it; files `rudder` did not write are never overwritten without `--force`.
+- **Search the Rudder documentation from the panel you host.** The panel now serves its own guides, so an agent or you can read the docs of the exact version you run. AI agents get three new MCP tools (`get_v1_docs_search`, `get_v1_docs__name_`, `get_v1_docs`, under the `system:read` permission), and the CLI gets `rudder docs search`, `read`, and `list`.
+- **Delete a project, an environment, or a service from the panel.** **Projects** now has **Delete project** and **Delete environment**, and the service page has **Delete service**. Each asks you to type the name first, and deleting is also available through the API and MCP (`DELETE /api/v1/projects/{id}`, `/environments/{id}`, `/services/{id}`).
+
+### Fixed
+- **Deleting a project or an environment now removes the containers of its services.** Before, the database rows were deleted but the containers (and compose stacks) kept running on the servers; they are now stopped and removed, and the routes are republished. Deleting an environment is recorded in the audit log as `environment.delete`.
+
 ## [0.8.1] - 2026-11-07
 
 ### Added
