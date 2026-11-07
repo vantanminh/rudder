@@ -647,13 +647,20 @@ async fn delete_project(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
-    let result = sqlx::query!(r#"DELETE FROM projects WHERE id = $1"#, id)
+    let exists = sqlx::query_scalar::<_, Uuid>("SELECT id FROM projects WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(ApiError::database)?;
+    if exists.is_none() {
+        return Err(not_found("project not found"));
+    }
+    let servers = teardown_services_of(&state, id, None).await?;
+    sqlx::query!(r#"DELETE FROM projects WHERE id = $1"#, id)
         .execute(&state.pool)
         .await
         .map_err(ApiError::database)?;
-    if result.rows_affected() == 0 {
-        return Err(not_found("project not found"));
-    }
+    republish(&state, servers).await;
     audit::record(
         &state.pool,
         Some(auth.id),
@@ -752,13 +759,29 @@ async fn delete_environment(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
-    let result = sqlx::query!(r#"DELETE FROM environments WHERE id = $1"#, id)
+    let project_id =
+        sqlx::query_scalar::<_, Uuid>("SELECT project_id FROM environments WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(ApiError::database)?
+            .ok_or_else(|| not_found("environment not found"))?;
+    let servers = teardown_services_of(&state, project_id, Some(id)).await?;
+    sqlx::query!(r#"DELETE FROM environments WHERE id = $1"#, id)
         .execute(&state.pool)
         .await
         .map_err(ApiError::database)?;
-    if result.rows_affected() == 0 {
-        return Err(not_found("environment not found"));
-    }
+    republish(&state, servers).await;
+    audit::record(
+        &state.pool,
+        Some(auth.id),
+        "environment.delete",
+        "environment",
+        Some(&id.to_string()),
+        json!({}),
+        None,
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -959,25 +982,14 @@ async fn delete_service(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     auth.require_write()?;
-    let service = sqlx::query!(
-        r#"SELECT kind, server_id, current_container_id FROM services WHERE id = $1"#,
-        id
-    )
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(ApiError::database)?
-    .ok_or_else(|| not_found("service not found"))?;
-    if service.kind == "compose" {
-        crate::stacks::destroy(&state, id, false).await?;
-    } else {
-        remove_service_containers(&state, id, service.server_id, service.current_container_id)
-            .await;
-    }
+    let server_id = teardown_service(&state, id)
+        .await?
+        .ok_or_else(|| not_found("service not found"))?;
     sqlx::query!(r#"DELETE FROM services WHERE id = $1"#, id)
         .execute(&state.pool)
         .await
         .map_err(ApiError::database)?;
-    if let Err(error) = crate::publish::publish_server(&state, service.server_id).await {
+    if let Err(error) = crate::publish::publish_server(&state, server_id).await {
         tracing::warn!(message = %error.public_message(), "routes were not republished");
     }
     audit::record(
@@ -991,6 +1003,64 @@ async fn delete_service(
     )
     .await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Removes everything a service runs (its stack or containers) and returns the server it
+/// ran on, or `None` when the service does not exist. The database row stays.
+async fn teardown_service(state: &AppState, id: Uuid) -> Result<Option<Uuid>, ApiError> {
+    let Some(service) = sqlx::query!(
+        r#"SELECT kind, server_id, current_container_id FROM services WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(ApiError::database)?
+    else {
+        return Ok(None);
+    };
+    if service.kind == "compose" {
+        crate::stacks::destroy(state, id, false).await?;
+    } else {
+        remove_service_containers(state, id, service.server_id, service.current_container_id).await;
+    }
+    Ok(Some(service.server_id))
+}
+
+/// Tears down every service of an environment, or of a whole project when `environment_id`
+/// is `None`, so that deleting the parent row (which cascades to the services) does not leave
+/// containers behind. Returns the servers that hosted them, to republish routes afterwards.
+async fn teardown_services_of(
+    state: &AppState,
+    project_id: Uuid,
+    environment_id: Option<Uuid>,
+) -> Result<Vec<Uuid>, ApiError> {
+    let ids: Vec<Uuid> = sqlx::query_scalar::<_, Uuid>(
+        "SELECT s.id FROM services s
+         JOIN environments e ON e.id = s.environment_id
+         WHERE e.project_id = $1 AND ($2::uuid IS NULL OR e.id = $2)",
+    )
+    .bind(project_id)
+    .bind(environment_id)
+    .fetch_all(&state.pool)
+    .await
+    .map_err(ApiError::database)?;
+    let mut servers = Vec::new();
+    for id in ids {
+        if let Some(server_id) = teardown_service(state, id).await? {
+            if !servers.contains(&server_id) {
+                servers.push(server_id);
+            }
+        }
+    }
+    Ok(servers)
+}
+
+async fn republish(state: &AppState, servers: Vec<Uuid>) {
+    for server_id in servers {
+        if let Err(error) = crate::publish::publish_server(state, server_id).await {
+            tracing::warn!(message = %error.public_message(), "routes were not republished");
+        }
+    }
 }
 
 /// Best effort: a server that is offline or already gone must not block the delete.

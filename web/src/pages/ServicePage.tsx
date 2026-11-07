@@ -1,7 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api } from "../api";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { api, ApiError } from "../api";
+import { useAuth } from "../auth";
+import { DeleteDialog } from "../components/DeleteDialog";
 import { BackupJobForm, BackupJobs } from "../components/backups";
 import { ServiceCachePanel } from "../components/cache";
 import { DatabasePanel, ServiceLogs } from "../components/DatabasePanel";
@@ -125,12 +128,32 @@ export function ServicePage() {
     refetchInterval: 4000,
   });
 
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [deleting, setDeleting] = useState(false);
+
   const current = service.data;
   const isStack = current?.kind === "compose";
   const stack = useStack(id, isStack);
   const stackServices = isStack ? (stack.data?.services ?? []).map((item) => item.name) : [];
   const context = summaries.data?.find((item) => item.id === id);
   const server = servers.data?.find((item) => item.id === current?.server_id);
+  const remove = useMutation({
+    mutationFn: () => api(`/api/v1/services/${id}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      toast.success(t("Service deleted"));
+      queryClient.removeQueries({ queryKey: ["service", id] });
+      await queryClient.invalidateQueries({ queryKey: ["services"] });
+      navigate(
+        context
+          ? `/projects?project=${context.project_id}&env=${context.environment_id}`
+          : "/projects",
+      );
+    },
+    onError: (error) =>
+      toast.error(error instanceof ApiError ? error.message : t("Could not delete service")),
+  });
   const siteDomain =
     (domains.data ?? []).find((domain) => domain.published && !domain.is_preview) ??
     (domains.data ?? []).find((domain) => !domain.is_preview);
@@ -199,7 +222,26 @@ export function ServicePage() {
             {siteDomain.host}
           </a>
         ) : null}
+        {current && user?.role === "admin" ? (
+          <Button variant="danger" onClick={() => setDeleting(true)}>
+            {t("Delete service")}
+          </Button>
+        ) : null}
       </header>
+      {current && deleting ? (
+        <DeleteDialog
+          title={t("Delete service")}
+          name={current.name}
+          pending={remove.isPending}
+          onClose={() => setDeleting(false)}
+          onConfirm={() => remove.mutate()}
+        >
+          {t(
+            "This stops and removes {service}, its containers and its domains. This cannot be undone.",
+            { service: current.name },
+          )}
+        </DeleteDialog>
+      ) : null}
 
       {current ? (
         <SummaryBar

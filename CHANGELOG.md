@@ -8,6 +8,12 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+### Added
+- **Delete a project, an environment, or a service from the panel.** **Projects** now has **Delete project** and **Delete environment**, and the service page has **Delete service**. Each asks you to type the name first, and deleting is also available through the API and MCP (`DELETE /api/v1/projects/{id}`, `/environments/{id}`, `/services/{id}`).
+
+### Fixed
+- **Deleting a project or an environment now removes the containers of its services.** Before, the database rows were deleted but the containers (and compose stacks) kept running on the servers; they are now stopped and removed, and the routes are republished. Deleting an environment is recorded in the audit log as `environment.delete`.
+
 ## [0.8.1] - 2026-11-07
 
 ### Added
