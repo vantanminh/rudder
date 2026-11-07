@@ -839,7 +839,7 @@ async fn the_whole_mode_can_be_set_up_and_removed(pool: PgPool) {
         Some("panel.example.com"),
     )
     .await;
-    assert_eq!(cli_start.status, StatusCode::OK, "{}", cli_start.body);
+    assert_eq!(cli_start.status, StatusCode::CREATED, "{}", cli_start.body);
     let exempt = call_with(
         &app,
         "GET",

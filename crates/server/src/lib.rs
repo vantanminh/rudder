@@ -313,7 +313,7 @@ pub fn openapi_json() -> String {
 
 /// HTTP router. Additional route groups are nested here as features land.
 pub fn router(state: AppState) -> axum::Router {
-    axum::Router::new()
+    let api = axum::Router::new()
         .merge(routes::health::router())
         .merge(routes::account::router())
         .merge(routes::access::router())
@@ -337,7 +337,11 @@ pub fn router(state: AppState) -> axum::Router {
         .merge(routes::system::router())
         .merge(routes::load::router())
         .merge(routes::updates::router())
-        .merge(routes::mcp::router())
+        .merge(routes::mcp::router());
+    let mcp_api = api.clone();
+    axum::Router::new()
+        .merge(api)
+        .nest("/mcp", mcp_api)
         .merge(mcp::router())
         .merge(
             utoipa_swagger_ui::SwaggerUi::new("/api/docs")
