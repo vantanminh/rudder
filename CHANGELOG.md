@@ -8,6 +8,8 @@ Sections: **Added** (new things), **Changed** (existing behavior), **Fixed**, **
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-07
+
 ### Added
 - **BuildKit, automatic `GIT_SHA` and `BUILD_TIME` build args, `--platform`, `--no-cache`, `--progress`, and build context warnings in `rudder build`.** `rudder build` now enables BuildKit (`DOCKER_BUILDKIT=1`), automatically passes `GIT_SHA` and `BUILD_TIME` as `--build-arg`s (plus custom `build_args` from `rudder.toml` or `--build-arg KEY=VAL`), supports `--platform`, `--no-cache`, and `--progress`, reports the build context size sent to Docker (warning when it exceeds 200 MiB), falls back cleanly with a notice outside a Git repository, and prints a complete build summary.
 - **Upload progress, automatic retries, duplicate-upload skipping, and Cloudflare Access Service Token support in `rudder push`.** `rudder push` now skips uploading when the exact tag and SHA-256 digest are already present in Cloudflare R2, reports upload progress with automatic retry on transient network or `502`/`503`/`504` errors, prints a full summary with next steps, and supports `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET` when the panel is behind Cloudflare Access.
