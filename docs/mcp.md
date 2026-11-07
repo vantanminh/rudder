@@ -35,3 +35,19 @@ Only an administrator can approve an agent, and only from a signed-in browser. A
 ## When you add a feature
 
 Every panel feature is an MCP tool. A new HTTP route becomes a tool automatically, under the permission scope of its OpenAPI tag. Full control includes that tool. See the MCP parity rule in `AGENTS.md`.
+
+## Search the documentation
+
+Every panel carries its own copy of these guides, so an agent reads the documentation of the exact version you run, from the address it is already connected to. Three tools cover it (they need the `system:read` permission, which every template includes):
+
+| Tool | HTTP | Use |
+| --- | --- | --- |
+| `get_v1_docs_search` | `GET /api/v1/docs/search?q=…&limit=5` | Ranked matches: guide, section, and a snippet. `limit` is at most 20 |
+| `get_v1_docs__name_` | `GET /api/v1/docs/{name}` | One whole guide as Markdown, for example `cli` |
+| `get_v1_docs` | `GET /api/v1/docs` | The guide names and titles |
+
+Pass `q` as a query argument: `{"query": {"q": "deploy an image"}}`. A custom approval needs the **System** read permission ticked to use them.
+
+## Teach agents about Rudder (skills)
+
+`rudder skills install` puts a Rudder skill where AI coding agents look for skills. It explains what Rudder is, how to use the CLI and MCP tools, which actions need your confirmation, and how to search these docs. See [Skills for AI agents](cli.md#7-skills-for-ai-agents) in the CLI guide.

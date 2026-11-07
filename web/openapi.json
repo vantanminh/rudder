@@ -1986,6 +1986,72 @@
         }
       }
     },
+    "/api/v1/docs": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List the built-in Rudder guides of this panel version",
+        "operationId": "get_v1_docs",
+        "responses": {
+          "200": {
+            "description": "List the built-in Rudder guides of this panel version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/docs/search": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20)",
+        "operationId": "get_v1_docs_search",
+        "responses": {
+          "200": {
+            "description": "Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocSearchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/docs/{name}": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Read one Rudder guide as Markdown by name, as listed by the docs list or search",
+        "operationId": "get_v1_docs__name_",
+        "responses": {
+          "200": {
+            "description": "Read one Rudder guide as Markdown by name, as listed by the docs list or search",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/domains/{id}": {
       "delete": {
         "tags": [
@@ -8454,6 +8520,100 @@
             ]
           },
           "host": {
+            "type": "string"
+          }
+        }
+      },
+      "DocHit": {
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "section",
+          "snippet",
+          "score"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Higher is a better match.",
+            "minimum": 0
+          },
+          "section": {
+            "type": "string",
+            "description": "The heading the match is under."
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "DocPage": {
+        "type": "object",
+        "required": [
+          "name",
+          "title",
+          "version",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The whole guide as Markdown."
+          },
+          "name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "DocSearchResponse": {
+        "type": "object",
+        "required": [
+          "query",
+          "version",
+          "results"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocHit"
+            }
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the panel the guides belong to."
+          }
+        }
+      },
+      "DocSummary": {
+        "type": "object",
+        "required": [
+          "name",
+          "title"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Pass this to the read call, for example `cli`."
+          },
+          "title": {
             "type": "string"
           }
         }

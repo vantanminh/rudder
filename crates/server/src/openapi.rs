@@ -50,6 +50,7 @@ use crate::routes::cloudflare::{
 use crate::routes::databases::{
     ConnectionView, CreateDatabase, DatabaseEngineView, LifecycleView, LogsView, UpdateDatabase,
 };
+use crate::routes::docs::{DocHit, DocPage, DocSearchResponse, DocSummary};
 use crate::routes::edge::{
     CertificateView, CreateDomain, CreateRegistry, DeployBody, DomainView, PanelView,
     PreviewDomain, RegistryView, RollbackBody, UpdateDomain, UpdatePanel, UploadCertificate,
@@ -329,6 +330,10 @@ use rudder_core::{
         UpdateSettings,
         UpdateStarted,
         ComponentsStarted,
+        DocSummary,
+        DocHit,
+        DocSearchResponse,
+        DocPage,
         UpdateCheck,
         ReleaseInfo,
         ComponentStatus,
@@ -475,6 +480,33 @@ pub(crate) const ROUTES: &[Route] = &[
         request: None,
         response: Some("ComponentsStarted"),
         status: 202,
+    },
+    Route {
+        path: "/api/v1/docs",
+        method: HttpMethod::Get,
+        tag: "system",
+        summary: "List the built-in Rudder guides of this panel version",
+        request: None,
+        response: Some("[DocSummary]"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/docs/search",
+        method: HttpMethod::Get,
+        tag: "system",
+        summary: "Search the Rudder documentation of this panel version. Query: q (required), limit (default 5, max 20)",
+        request: None,
+        response: Some("DocSearchResponse"),
+        status: 200,
+    },
+    Route {
+        path: "/api/v1/docs/{name}",
+        method: HttpMethod::Get,
+        tag: "system",
+        summary: "Read one Rudder guide as Markdown by name, as listed by the docs list or search",
+        request: None,
+        response: Some("DocPage"),
+        status: 200,
     },
     Route {
         path: "/api/v1/load",
