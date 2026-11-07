@@ -11,9 +11,7 @@ use anyhow::{bail, Context as _};
 use chrono::{DateTime, SecondsFormat, Utc};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use rudder_core::{
-    select_images_to_prune_protecting, validate_image_tag, ImageVersionEntry,
-};
+use rudder_core::{select_images_to_prune_protecting, validate_image_tag, ImageVersionEntry};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -231,13 +229,7 @@ pub fn measure_build_context(context_dir: &Path, dockerfile: &Path) -> ContextSu
 
     let mut total_bytes = 0u64;
     let mut file_count = 0u64;
-    walk_context_dir(
-        context_dir,
-        "",
-        &rules,
-        &mut total_bytes,
-        &mut file_count,
-    );
+    walk_context_dir(context_dir, "", &rules, &mut total_bytes, &mut file_count);
 
     ContextSummary {
         total_bytes,
@@ -391,10 +383,7 @@ pub fn effective_build_args(
     custom: &BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
     let mut merged = BTreeMap::new();
-    merged.insert(
-        "GIT_SHA".to_owned(),
-        git_sha.unwrap_or("nogit").to_owned(),
-    );
+    merged.insert("GIT_SHA".to_owned(), git_sha.unwrap_or("nogit").to_owned());
     merged.insert("BUILD_TIME".to_owned(), build_time_rfc3339.to_owned());
     for (k, v) in custom {
         merged.insert(k.clone(), v.clone());
@@ -469,97 +458,93 @@ pub fn build_and_store_local(
         )?;
     }
 
-    let (size_bytes, sha256, image_id, detected_platform, uncompressed_bytes) =
-        if let Ok(fake_payload) = std::env::var("RUDDER_FAKE_DOCKER_ARCHIVE") {
-            let (sz, sha) = write_gzip_and_hash(fake_payload.as_bytes(), &dest_path)?;
-            (
-                sz,
-                sha,
-                None,
-                params.platform.map(str::to_owned),
-                None,
-            )
-        } else {
-            if !params.context_dir.exists() {
-                bail!(
-                    "build context directory '{}' does not exist",
-                    params.context_dir.display()
-                );
-            }
-            if !resolved_dockerfile.is_file() {
-                bail!(
+    let (size_bytes, sha256, image_id, detected_platform, uncompressed_bytes) = if let Ok(
+        fake_payload,
+    ) =
+        std::env::var("RUDDER_FAKE_DOCKER_ARCHIVE")
+    {
+        let (sz, sha) = write_gzip_and_hash(fake_payload.as_bytes(), &dest_path)?;
+        (sz, sha, None, params.platform.map(str::to_owned), None)
+    } else {
+        if !params.context_dir.exists() {
+            bail!(
+                "build context directory '{}' does not exist",
+                params.context_dir.display()
+            );
+        }
+        if !resolved_dockerfile.is_file() {
+            bail!(
                     "Dockerfile '{}' was not found (checked '{}' and '{}'); verify `dockerfile` in rudder.toml or pass --dockerfile <path>",
                     params.dockerfile,
                     Path::new(params.dockerfile).display(),
                     params.context_dir.join(params.dockerfile).display()
                 );
-            }
+        }
 
-            let mut cmd = Command::new("docker");
-            cmd.env("DOCKER_BUILDKIT", "1");
-            cmd.arg("build")
-                .arg("-f")
-                .arg(&resolved_dockerfile)
-                .arg("-t")
-                .arg(&image_ref);
-            if let Some(platform) = params.platform.filter(|p| !p.trim().is_empty()) {
-                cmd.args(["--platform", platform.trim()]);
-            }
-            if params.no_cache {
-                cmd.arg("--no-cache");
-            }
-            if let Some(progress) = params.progress.filter(|p| !p.trim().is_empty()) {
-                cmd.args(["--progress", progress.trim()]);
-            }
-            for (k, v) in &build_args {
-                cmd.arg("--build-arg").arg(format!("{k}={v}"));
-            }
-            cmd.arg(params.context_dir);
+        let mut cmd = Command::new("docker");
+        cmd.env("DOCKER_BUILDKIT", "1");
+        cmd.arg("build")
+            .arg("-f")
+            .arg(&resolved_dockerfile)
+            .arg("-t")
+            .arg(&image_ref);
+        if let Some(platform) = params.platform.filter(|p| !p.trim().is_empty()) {
+            cmd.args(["--platform", platform.trim()]);
+        }
+        if params.no_cache {
+            cmd.arg("--no-cache");
+        }
+        if let Some(progress) = params.progress.filter(|p| !p.trim().is_empty()) {
+            cmd.args(["--progress", progress.trim()]);
+        }
+        for (k, v) in &build_args {
+            cmd.arg("--build-arg").arg(format!("{k}={v}"));
+        }
+        cmd.arg(params.context_dir);
 
-            let build_status = cmd.status().map_err(|err| {
-                anyhow::anyhow!(
-                    "could not start `docker build`: {err}. Is Docker installed and on your PATH?"
-                )
-            })?;
-            if !build_status.success() {
-                bail!(
+        let build_status = cmd.status().map_err(|err| {
+            anyhow::anyhow!(
+                "could not start `docker build`: {err}. Is Docker installed and on your PATH?"
+            )
+        })?;
+        if !build_status.success() {
+            bail!(
                     "`docker build` failed with status {build_status}. Check the build output above, and confirm the Docker daemon (e.g. Docker Desktop) is running."
                 );
-            }
+        }
 
-            let (image_id, detected_platform, uncompressed_bytes) =
-                inspect_built_image(&image_ref);
+        let (image_id, detected_platform, uncompressed_bytes) = inspect_built_image(&image_ref);
 
-            writeln!(out, "==> Exporting and compressing {image_ref}")?;
-            let mut save_child = Command::new("docker")
-                .args(["save", &image_ref])
-                .stdout(Stdio::piped())
-                .spawn()
-                .context("run `docker save`")?;
-            let mut stdout = save_child
-                .stdout
-                .take()
-                .context("capture `docker save` stdout")?;
-            let file = std::fs::File::create(&dest_path)
-                .with_context(|| format!("create {}", dest_path.display()))?;
-            let mut gz = GzEncoder::new(file, Compression::default());
-            std::io::copy(&mut stdout, &mut gz).context("compress `docker save` output")?;
-            let file = gz.finish().context("finish gzip archive")?;
-            file.sync_all()?;
-            let save_status = save_child.wait()?;
-            if !save_status.success() {
-                let _ = std::fs::remove_file(&dest_path);
-                bail!("`docker save` failed with status {save_status}");
-            }
-            let (sz, sha) = hash_file(&dest_path)?;
-            (
-                sz,
-                sha,
-                image_id,
-                detected_platform.or_else(|| params.platform.map(str::to_owned)),
-                uncompressed_bytes,
-            )
-        };
+        writeln!(out, "==> Exporting and compressing {image_ref}")?;
+        let mut save_child = Command::new("docker")
+            .args(["save", &image_ref])
+            .stdout(Stdio::piped())
+            .spawn()
+            .context("run `docker save`")?;
+        let mut stdout = save_child
+            .stdout
+            .take()
+            .context("capture `docker save` stdout")?;
+        let file = std::fs::File::create(&dest_path)
+            .with_context(|| format!("create {}", dest_path.display()))?;
+        let mut gz = GzEncoder::new(file, Compression::default());
+        std::io::copy(&mut stdout, &mut gz).context("compress `docker save` output")?;
+        let file = gz.finish().context("finish gzip archive")?;
+        file.sync_all()?;
+        let save_status = save_child.wait()?;
+        if !save_status.success() {
+            let _ = std::fs::remove_file(&dest_path);
+            bail!("`docker save` failed with status {save_status}");
+        }
+        let (sz, sha) = hash_file(&dest_path)?;
+        (
+            sz,
+            sha,
+            image_id,
+            detected_platform.or_else(|| params.platform.map(str::to_owned)),
+            uncompressed_bytes,
+        )
+    };
 
     let record = LocalImageRecord {
         tag: tag.clone(),
@@ -764,8 +749,10 @@ mod tests {
 
     #[test]
     fn dockerignore_respects_dockerfile_specific_ignore_and_negations() {
-        let tmp =
-            std::env::temp_dir().join(format!("rudder-ctx-test-{}", Utc::now().timestamp_nanos_opt().unwrap_or(1)));
+        let tmp = std::env::temp_dir().join(format!(
+            "rudder-ctx-test-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or(1)
+        ));
         let rust_dir = tmp.join("rust");
         let nm_dir = tmp.join("node_modules");
         std::fs::create_dir_all(&rust_dir).unwrap();

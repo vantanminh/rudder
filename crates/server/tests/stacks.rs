@@ -906,12 +906,15 @@ async fn docker_stack_lifecycle(pool: PgPool) {
     );
     let compose_file = data_dir.join(format!("stacks/{project}/rudder-compose.yml"));
     assert!(compose_file.exists());
-    use std::os::unix::fs::PermissionsExt;
-    let mode = std::fs::metadata(data_dir.join(format!("stacks/{project}/.env")))
-        .unwrap()
-        .permissions()
-        .mode();
-    assert_eq!(mode & 0o777, 0o600);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(data_dir.join(format!("stacks/{project}/.env")))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
 
     let view = client
         .ok("GET", &format!("/api/v1/services/{id}/stack"), None)

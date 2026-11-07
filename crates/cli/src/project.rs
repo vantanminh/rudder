@@ -50,7 +50,9 @@ impl ProjectConfig {
         if let Some(platform) = &self.platform {
             out.push_str(&format!("platform = {}\n", quote_str(platform)));
         } else {
-            out.push_str("# platform = \"linux/amd64\" # Optional: target platform for docker build\n");
+            out.push_str(
+                "# platform = \"linux/amd64\" # Optional: target platform for docker build\n",
+            );
         }
         let checks_rendered: Vec<String> = self.checks.iter().map(|c| quote_str(c)).collect();
         out.push_str(&format!("checks = [{}]\n", checks_rendered.join(", ")));
@@ -349,6 +351,9 @@ mod tests {
         assert_eq!(parsed.platform.as_deref(), Some("linux/amd64"));
         assert_eq!(parsed.build_args.get("A").map(String::as_str), Some("1"));
         assert_eq!(parsed.build_args.get("B").map(String::as_str), Some("two"));
-        assert_eq!(parsed.build_args.get("C").map(String::as_str), Some("three"));
+        assert_eq!(
+            parsed.build_args.get("C").map(String::as_str),
+            Some("three")
+        );
     }
 }

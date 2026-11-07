@@ -636,16 +636,13 @@ async fn push_service_image(
         })
         .collect();
 
-    let deployed_tag = service
-        .current_image
-        .as_deref()
-        .and_then(|img| {
-            all_images
-                .iter()
-                .find(|row| row.image_ref == img)
-                .map(|row| row.tag.as_str())
-                .or_else(|| img.rsplit_once(':').map(|(_, tag)| tag))
-        });
+    let deployed_tag = service.current_image.as_deref().and_then(|img| {
+        all_images
+            .iter()
+            .find(|row| row.image_ref == img)
+            .map(|row| row.tag.as_str())
+            .or_else(|| img.rsplit_once(':').map(|(_, tag)| tag))
+    });
 
     let to_prune = select_images_to_prune_protecting(
         &entries,

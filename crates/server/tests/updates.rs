@@ -531,6 +531,7 @@ fn agent_script(version: &str) -> Vec<u8> {
 
 #[sqlx::test(migrations = "./migrations")]
 async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) {
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     let (github, _fake) = start_github().await;
@@ -594,6 +595,7 @@ async fn outdated_agents_receive_the_bundled_binary_and_reconnect(pool: PgPool) 
     // The agent's own executable, as installed on a server.
     let binary = agent_dir.path().join("rudder-agent");
     std::fs::write(&binary, agent_script("0.0.1")).unwrap();
+    #[cfg(unix)]
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755)).unwrap();
     let (restart_tx, mut restart_rx) = tokio::sync::mpsc::unbounded_channel::<()>();
     let start = |identity: rudder_agent::Identity| {

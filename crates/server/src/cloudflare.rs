@@ -1154,8 +1154,7 @@ pub async fn enforce_access(
     if host.is_empty() {
         return next.run(request).await;
     }
-    let cli_or_api_client =
-        is_cli_or_api_client_request(request.uri().path(), request.headers());
+    let cli_or_api_client = is_cli_or_api_client_request(request.uri().path(), request.headers());
     if cli_or_api_client {
         request.headers_mut().remove(axum::http::header::COOKIE);
     }
@@ -1227,9 +1226,18 @@ mod tests {
     #[test]
     fn cli_and_bearer_api_requests_are_identified() {
         let empty = axum::http::HeaderMap::new();
-        assert!(is_cli_or_api_client_request("/api/v1/cli/auth/start", &empty));
-        assert!(is_cli_or_api_client_request("/api/v1/cli/auth/poll", &empty));
-        assert!(!is_cli_or_api_client_request("/api/v1/cli/auth/approve", &empty));
+        assert!(is_cli_or_api_client_request(
+            "/api/v1/cli/auth/start",
+            &empty
+        ));
+        assert!(is_cli_or_api_client_request(
+            "/api/v1/cli/auth/poll",
+            &empty
+        ));
+        assert!(!is_cli_or_api_client_request(
+            "/api/v1/cli/auth/approve",
+            &empty
+        ));
         assert!(!is_cli_or_api_client_request("/api/v1/me", &empty));
 
         let mut bearer = axum::http::HeaderMap::new();

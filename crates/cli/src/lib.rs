@@ -115,7 +115,11 @@ pub async fn run(
         Some("logout") => {
             let rest: Vec<String> = args.collect();
             if rest.iter().any(|a| a == "--help" || a == "-h") {
-                writeln!(out, "Usage: rudder logout\n\nRemove the saved panel URL and API token from {}.", ctx.config_path.display())?;
+                writeln!(
+                    out,
+                    "Usage: rudder logout\n\nRemove the saved panel URL and API token from {}.",
+                    ctx.config_path.display()
+                )?;
                 return Ok(());
             }
             match std::fs::remove_file(&ctx.config_path) {
@@ -149,7 +153,10 @@ pub async fn run(
         Some("services") => {
             let rest: Vec<String> = args.collect();
             if rest.iter().any(|a| a == "--help" || a == "-h") {
-                writeln!(out, "Usage: rudder services\n\nList all services across projects and environments.")?;
+                writeln!(
+                    out,
+                    "Usage: rudder services\n\nList all services across projects and environments."
+                )?;
                 return Ok(());
             }
             services(&Api::from_context(ctx)?, out).await
@@ -1378,7 +1385,11 @@ async fn push_cmd(
         image::format_bytes(record.size_bytes),
         record.size_bytes
     )?;
-    writeln!(out, "  Digest:      sha256:{} (verified by panel)", record.sha256)?;
+    writeln!(
+        out,
+        "  Digest:      sha256:{} (verified by panel)",
+        record.sha256
+    )?;
     writeln!(out, "  Duration:    {:.1}s", elapsed.as_secs_f64())?;
     writeln!(out, "  Dashboard:   {}/services/{}", api.base, service.id)?;
 
@@ -2312,13 +2323,18 @@ mod tests {
             read_token: Box::new(|| Ok(String::new())),
             poll: Duration::from_millis(10),
         };
-        for cmd in ["login", "init", "build", "push", "deploy", "images", "status", "logs", "update"] {
+        for cmd in [
+            "login", "init", "build", "push", "deploy", "images", "status", "logs", "update",
+        ] {
             let mut out = Vec::new();
             run(vec![cmd.into(), "--help".into()], &ctx, &mut out)
                 .await
                 .unwrap_or_else(|e| panic!("`rudder {cmd} --help` failed: {e}"));
             let text = String::from_utf8(out).unwrap();
-            assert!(text.contains("Usage:"), "`rudder {cmd} --help` missing Usage: {text}");
+            assert!(
+                text.contains("Usage:"),
+                "`rudder {cmd} --help` missing Usage: {text}"
+            );
         }
     }
 
@@ -2386,7 +2402,8 @@ mod tests {
                             body.len()
                         )
                     } else {
-                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            .to_owned()
                     };
                     let _ = stream.write_all(reply.as_bytes()).await;
                     let _ = stream.shutdown().await;
@@ -2428,7 +2445,10 @@ mod tests {
             .await
             .unwrap();
         let whoami_text = String::from_utf8(whoami_out).unwrap();
-        assert!(whoami_text.contains("admin@example.com (owner)"), "{whoami_text}");
+        assert!(
+            whoami_text.contains("admin@example.com (owner)"),
+            "{whoami_text}"
+        );
 
         server.abort();
         let _ = std::fs::remove_dir_all(&dir);

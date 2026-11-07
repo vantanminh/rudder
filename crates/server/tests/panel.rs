@@ -6,6 +6,7 @@
 
 use std::collections::HashMap;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
@@ -535,6 +536,7 @@ async fn panel_backup_restores_into_a_fresh_database(pool: PgPool) {
         std::fs::read_to_string(&key_file).unwrap().trim(),
         MASTER_HEX
     );
+    #[cfg(unix)]
     assert_eq!(
         std::fs::metadata(&key_file).unwrap().permissions().mode() & 0o777,
         0o600
