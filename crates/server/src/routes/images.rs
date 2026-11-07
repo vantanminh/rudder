@@ -398,10 +398,10 @@ async fn push_service_image(
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| not_found("service not found"))?;
-    if service.kind != "application" {
+    if service.kind != "application" && service.kind != "compose" {
         return Err(bad(
             "invalid_kind",
-            "Rudder Image push is only available for application services",
+            "Rudder Image push is only available for application and Compose services",
         ));
     }
 

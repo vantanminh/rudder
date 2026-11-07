@@ -85,7 +85,7 @@ Open **Account → API tokens** in the Rudder dashboard, enter the 8-character c
    - Select your Cloudflare R2 bucket as the **Bucket**.
    - Set the **Object key prefix** (default `rudder-images`).
    - Optionally set **Keep on R2 (versions per service)** and **Keep on R2 (days)** so older images are automatically deleted from Cloudflare R2 to save storage cost while remaining on the developer's machine.
-4. On each application service (**Services → `<app>` → General → Rudder Image**), configure the per-service policy:
+4. On each application or Compose service (**Services → `<app>` → General → Rudder Image**), configure the per-service policy:
    - **Auto-deploy immediately when a new image is pushed**:
      - **On (default)**: `rudder push` immediately loads the image from R2 into Docker on the target server and deploys it.
      - **Off**: `rudder push` stores the image in R2 and emits an `image.pushed` notification without deploying until you run `rudder deploy` (or click **Deploy** in the panel).

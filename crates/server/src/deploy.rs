@@ -378,10 +378,11 @@ pub(crate) async fn deploy_r2_stream(
     .await
     .map_err(ApiError::database)?
     .ok_or_else(|| not_found("service not found"))?;
-    if service.kind != "application" {
+    let compose = service.kind == "compose";
+    if service.kind != "application" && !compose {
         return Err(bad(
             "invalid_kind",
-            "image deploy is available for application services",
+            "image deploy is available for application and Compose services",
         ));
     }
     let server_kind = sqlx::query_scalar!(
@@ -397,6 +398,20 @@ pub(crate) async fn deploy_r2_stream(
             "remote_unavailable",
             "the agent for this server is not connected",
         ));
+    }
+    if compose {
+        // A stack has no single container to swap: load the image onto its server, then run
+        // `docker compose up -d`, which recreates the services whose image changed. The
+        // compose file refers to the pushed image by its reference.
+        let driver = crate::nodes::driver_for(state, service.server_id).await?;
+        driver.load_image(tar_stream).await.map_err(core_error)?;
+        return crate::stacks::start_action(
+            state,
+            service_id,
+            crate::stacks::StackAction::Up,
+            &trigger,
+        )
+        .await;
     }
     let deployment_id = insert_deployment(state, service_id, &trigger, &image).await?;
     let driver = match crate::nodes::driver_for(state, service.server_id).await {
